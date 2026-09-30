@@ -52,7 +52,8 @@ app.use('/public/share', shareRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
-    system: 'AetherDrive Cloud',
+    system: 'Khanza.NET DRIVE',
+    organization: 'PT.Khanza Digital Nusantara',
     timestamp: new Date().toISOString()
   });
 });
@@ -60,10 +61,21 @@ app.get('/health', (req, res) => {
 // Serve frontend in production or if client/dist exists
 const clientDistPath = path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(clientDistPath)) {
-  app.use(express.static(clientDistPath));
+  app.use(express.static(clientDistPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    }
+  }));
   app.use((req, res) => {
     // If route doesn't match API, serve index.html for SPA client-side routing
     if (!req.url.startsWith('/api') && !req.url.startsWith('/webdav') && !req.url.startsWith('/public')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(clientDistPath, 'index.html'));
     } else {
       res.status(404).json({ error: 'Endpoint not found' });
@@ -81,7 +93,8 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
-  console.log(`🚀 AetherDrive Server is running on http://0.0.0.0:${PORT}`);
+  console.log(`🚀 Khanza.NET DRIVE is running on http://0.0.0.0:${PORT}`);
+  console.log(`🏢 is a member of PT.Khanza Digital Nusantara`);
   console.log(`📁 Storage directory: ${path.join(__dirname, '..', 'data', 'storage')}`);
   console.log(`🌐 Cloudflare & Proxmox reverse proxy ready`);
   console.log(`💾 WebDAV endpoint: http://localhost:${PORT}/webdav`);

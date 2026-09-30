@@ -3,9 +3,10 @@ import axios from 'axios';
 import { 
   Cpu, HardDrive, Users, Activity, Settings, Shield, 
   UserPlus, Edit2, Trash2, CheckCircle2, XCircle, 
-  Server, RefreshCw, Key, ShieldCheck, Database, Clock, Usb, FolderInput
+  Server, RefreshCw, Key, ShieldCheck, Database, Clock, Usb, FolderInput, DownloadCloud
 } from 'lucide-react';
 import { formatBytes, formatDate } from '../utils/format';
+import NotificationModal from './NotificationModal';
 
 export default function AdminDashboard({ token, onClose }) {
   const [activeTab, setActiveTab] = useState('metrics'); // 'metrics', 'users', 'pools', 'usb', 'logs', 'settings'
@@ -17,6 +18,7 @@ export default function AdminDashboard({ token, onClose }) {
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [dialog, setDialog] = useState(null);
 
   // User form modal state
   const [showUserModal, setShowUserModal] = useState(false);
@@ -79,35 +81,68 @@ export default function AdminDashboard({ token, onClose }) {
       }
       setShowUserModal(false);
       setEditingUser(null);
+      setDialog({
+        type: 'success',
+        title: 'Berhasil Disimpan',
+        message: editingUser ? 'Data akun pengguna berhasil diperbarui.' : 'Akun pengguna baru berhasil dibuat dan siap digunakan.'
+      });
       loadAllData();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to save user');
+      setDialog({
+        type: 'error',
+        title: 'Gagal Menyimpan Akun',
+        message: err.response?.data?.error || 'Terjadi kendala saat menyimpan data pengguna.'
+      });
     }
   };
 
   const handleDeleteUser = async (userId, username) => {
-    if (confirm(`Are you sure you want to delete user "${username}" and all their files permanently?`)) {
-      try {
-        await axios.delete(`/api/admin/users/${userId}`, authHeader);
-        loadAllData();
-      } catch (err) {
-        alert(err.response?.data?.error || 'Failed to delete user');
+    setDialog({
+      type: 'confirm',
+      title: 'Hapus Akun Pengguna?',
+      message: `Apakah Anda yakin ingin menghapus akun "${username}" beserta seluruh berkasnya secara permanen? Tindakan ini tidak dapat dibatalkan.`,
+      confirmText: 'Ya, Hapus Akun',
+      cancelText: 'Batal',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`/api/admin/users/${userId}`, authHeader);
+          setDialog({
+            type: 'success',
+            title: 'Akun Dihapus',
+            message: `Akun pengguna "${username}" berhasil dihapus dari sistem.`
+          });
+          loadAllData();
+        } catch (err) {
+          setDialog({
+            type: 'error',
+            title: 'Gagal Menghapus Akun',
+            message: err.response?.data?.error || 'Terjadi kesalahan saat menghapus pengguna.'
+          });
+        }
       }
-    }
+    });
   };
 
   const handleSaveSettings = async () => {
     try {
       await axios.put('/api/admin/settings', { settings }, authHeader);
-      alert('System settings updated successfully!');
+      setDialog({
+        type: 'success',
+        title: 'Konfigurasi Diperbarui',
+        message: 'Pengaturan sistem peladen berhasil disimpan dan langsung diterapkan.'
+      });
       loadAllData();
     } catch (err) {
-      alert('Failed to update settings');
+      setDialog({
+        type: 'error',
+        title: 'Gagal Memperbarui Pengaturan',
+        message: 'Terjadi kesalahan saat menyimpan pengaturan sistem.'
+      });
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-y-auto bg-slate-950 p-6">
+    <div className="flex-1 flex flex-col h-full overflow-y-auto bg-slate-950 p-6">
       
       {/* Top Title & Refresh */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-800">
@@ -117,12 +152,12 @@ export default function AdminDashboard({ token, onClose }) {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-white tracking-tight">TrueNAS System Console</h1>
+              <h1 className="text-xl font-bold text-white tracking-tight">Konsol Sistem TrueNAS / Proxmox</h1>
               <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                 PROXMOX LXC
               </span>
             </div>
-            <p className="text-xs text-slate-400">Node Management, Role-Based Access Control & Telemetry</p>
+            <p className="text-xs text-slate-400">Manajemen Node Peladen, Hak Akses Pengguna & Telemetri</p>
           </div>
         </div>
 
@@ -130,10 +165,10 @@ export default function AdminDashboard({ token, onClose }) {
           <button
             onClick={loadAllData}
             disabled={refreshing}
-            className="px-3 py-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-medium rounded-xl flex items-center gap-2 transition-all shadow-sm"
+            className="px-3 py-1.5 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 text-xs font-medium rounded-xl flex items-center gap-2 transition-all shadow-sm cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${refreshing ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <span>Segarkan</span>
           </button>
         </div>
       </div>
@@ -147,13 +182,13 @@ export default function AdminDashboard({ token, onClose }) {
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
               <span className="font-semibold flex items-center gap-1.5">
                 <Cpu className="w-4 h-4 text-indigo-400" />
-                CPU Load
+                Beban Prosesor (CPU)
               </span>
-              <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded">{metrics.cpu.cores} Cores</span>
+              <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded">{metrics.cpu.cores} Core</span>
             </div>
             <div className="flex items-baseline justify-between mb-2">
               <span className="text-2xl font-bold text-white">{metrics.cpu.load}%</span>
-              <span className="text-xs text-slate-400">Active</span>
+              <span className="text-xs text-slate-400">Aktif</span>
             </div>
             <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div
@@ -170,13 +205,13 @@ export default function AdminDashboard({ token, onClose }) {
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
               <span className="font-semibold flex items-center gap-1.5">
                 <Activity className="w-4 h-4 text-cyan-400" />
-                Memory RAM
+                Penggunaan Memori (RAM)
               </span>
               <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded">{metrics.memory.percent}%</span>
             </div>
             <div className="flex items-baseline justify-between mb-2">
               <span className="text-2xl font-bold text-white">{formatBytes(metrics.memory.used)}</span>
-              <span className="text-xs text-slate-400">of {formatBytes(metrics.memory.total)}</span>
+              <span className="text-xs text-slate-400">dari {formatBytes(metrics.memory.total)}</span>
             </div>
             <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div
@@ -191,13 +226,13 @@ export default function AdminDashboard({ token, onClose }) {
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
               <span className="font-semibold flex items-center gap-1.5">
                 <Database className="w-4 h-4 text-emerald-400" />
-                ZFS Storage Pool
+                Penyimpanan Cloud Aktif
               </span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-bold">ONLINE</span>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-bold">AKTIF</span>
             </div>
             <div className="flex items-baseline justify-between mb-2">
               <span className="text-2xl font-bold text-white">{formatBytes(metrics.stats.totalStorageUsed)}</span>
-              <span className="text-xs text-slate-400">{metrics.stats.totalFiles} files</span>
+              <span className="text-xs text-slate-400">{metrics.stats.totalFiles} berkas</span>
             </div>
             <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div className="h-full bg-emerald-500 w-1/4"></div>
@@ -209,14 +244,14 @@ export default function AdminDashboard({ token, onClose }) {
             <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
               <span className="font-semibold flex items-center gap-1.5">
                 <Server className="w-4 h-4 text-blue-400" />
-                Proxmox Node
+                Node Peladen
               </span>
               <span className="text-[10px] text-slate-400 truncate max-w-[90px]">{metrics.os.platform}</span>
             </div>
             <p className="text-sm font-bold text-white truncate">{metrics.os.distro}</p>
             <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-2">
               <Clock className="w-3.5 h-3.5 text-slate-500" />
-              <span>Uptime: {Math.floor(metrics.os.uptimeSeconds / 3600)}h {Math.floor((metrics.os.uptimeSeconds % 3600) / 60)}m</span>
+              <span>Waktu Aktif: {Math.floor(metrics.os.uptimeSeconds / 3600)} jam {Math.floor((metrics.os.uptimeSeconds % 3600) / 60)} menit</span>
             </div>
           </div>
         </div>
@@ -225,11 +260,11 @@ export default function AdminDashboard({ token, onClose }) {
       {/* Navigation Sub-Tabs */}
       <div className="flex border-b border-slate-800 mb-6 gap-2">
         {[
-          { id: 'users', label: 'Users & Permissions', icon: Users, count: users.length },
-          { id: 'pools', label: 'Disks & Storage Pools', icon: HardDrive, count: pools.length },
+          { id: 'users', label: 'Pengguna & Hak Akses', icon: Users, count: users.length },
+          { id: 'pools', label: 'Diska & Partisi (Storage Pools)', icon: HardDrive, count: pools.length },
           { id: 'usb', label: 'USB & Flashdisk (NTFS)', icon: Usb, count: usbDrives.length },
-          { id: 'logs', label: 'Security & Audit Logs', icon: Activity, count: logs.length },
-          { id: 'settings', label: 'System Configuration', icon: Settings },
+          { id: 'logs', label: 'Catatan Keamanan & Audit', icon: Activity, count: logs.length },
+          { id: 'settings', label: 'Konfigurasi Sistem', icon: Settings },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -237,7 +272,7 @@ export default function AdminDashboard({ token, onClose }) {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 px-3 text-xs font-semibold flex items-center gap-2 transition-all ${
+              className={`pb-3 px-3 text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
                 isActive
                   ? 'border-b-2 border-blue-500 text-blue-400'
                   : 'text-slate-400 hover:text-slate-200'
@@ -259,17 +294,17 @@ export default function AdminDashboard({ token, onClose }) {
       {activeTab === 'users' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-200">Registered Accounts & Access Roles</h3>
+            <h3 className="text-sm font-bold text-slate-200">Daftar Akun Pengguna & Hak Akses</h3>
             <button
               onClick={() => {
                 setEditingUser(null);
                 setFormData({ username: '', email: '', password: '', role: 'user', quota_gb: 15, is_active: 1 });
                 setShowUserModal(true);
               }}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md shadow-blue-500/20"
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center gap-2 transition-all shadow-md shadow-blue-500/20 cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Create New User</span>
+              <span>+ Tambah Pengguna Baru</span>
             </button>
           </div>
 
@@ -277,12 +312,12 @@ export default function AdminDashboard({ token, onClose }) {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 text-[11px] font-semibold">
                 <tr>
-                  <th className="py-3 px-4">User</th>
-                  <th className="py-3 px-4">Role</th>
-                  <th className="py-3 px-4">Storage Quota</th>
+                  <th className="py-3 px-4">Pengguna</th>
+                  <th className="py-3 px-4">Peran / Akses</th>
+                  <th className="py-3 px-4">Kuota Penyimpanan</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Created Date</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+                  <th className="py-3 px-4">Tanggal Dibuat</th>
+                  <th className="py-3 px-4 text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -307,7 +342,7 @@ export default function AdminDashboard({ token, onClose }) {
                             ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
                             : 'bg-slate-800 text-slate-300'
                         }`}>
-                          {u.role}
+                          {u.role === 'admin' ? 'Administrator' : u.role === 'guest' ? 'Tamu' : 'Pengguna'}
                         </span>
                       </td>
                       <td className="py-3 px-4">
@@ -325,12 +360,12 @@ export default function AdminDashboard({ token, onClose }) {
                         {u.is_active === 1 ? (
                           <span className="flex items-center gap-1.5 text-emerald-400 text-[11px] font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            Active
+                            Aktif
                           </span>
                         ) : (
                           <span className="flex items-center gap-1.5 text-red-400 text-[11px] font-medium">
                             <XCircle className="w-3.5 h-3.5" />
-                            Suspended
+                            Ditangguhkan
                           </span>
                         )}
                       </td>
@@ -352,16 +387,16 @@ export default function AdminDashboard({ token, onClose }) {
                               });
                               setShowUserModal(true);
                             }}
-                            className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-lg transition-colors"
-                            title="Edit Permissions & Quota"
+                            className="p-1.5 text-slate-400 hover:text-blue-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                            title="Ubah Hak Akses & Kuota"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           {u.role !== 'admin' && (
                             <button
                               onClick={() => handleDeleteUser(u.id, u.username)}
-                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors"
-                              title="Delete Account"
+                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus Akun"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -380,10 +415,13 @@ export default function AdminDashboard({ token, onClose }) {
       {/* TAB 2: STORAGE POOLS */}
       {activeTab === 'pools' && (
         <div className="space-y-4">
-          <h3 className="text-sm font-bold text-slate-200">Physical Disks & Mounted Pools</h3>
+          <div>
+            <h3 className="text-sm font-bold text-slate-200">Diska Fisik & Partisi Penyimpanan yang Terpasang (Storage Pools)</h3>
+            <p className="text-xs text-slate-400">Daftar partisi diska fisik dan drive penyimpanan yang aktif di peladen server Anda</p>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {metrics?.disks?.map((disk, idx) => (
-              <div key={idx} className="p-4 bg-slate-900 border border-slate-800 rounded-2xl">
+              <div key={idx} className="p-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2.5">
                     <HardDrive className="w-5 h-5 text-emerald-400" />
@@ -393,12 +431,12 @@ export default function AdminDashboard({ token, onClose }) {
                     </div>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    MOUNTED
+                    TERPASANG (MOUNTED)
                   </span>
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs text-slate-300">
-                    <span>Used: {formatBytes(disk.used)}</span>
+                    <span>Terpakai: {formatBytes(disk.used)}</span>
                     <span>Total: {formatBytes(disk.size)}</span>
                   </div>
                   <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
@@ -407,7 +445,7 @@ export default function AdminDashboard({ token, onClose }) {
                       style={{ width: `${disk.usePercent}%` }}
                     ></div>
                   </div>
-                  <p className="text-[10px] text-slate-500 text-right">{disk.usePercent}% capacity used</p>
+                  <p className="text-[10px] text-slate-500 text-right">{disk.usePercent}% kapasitas terpakai</p>
                 </div>
               </div>
             ))}
@@ -420,15 +458,15 @@ export default function AdminDashboard({ token, onClose }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-200">External USB Flashdrives & NTFS Detection</h3>
-              <p className="text-xs text-slate-400">Detect hot-plugged USB drives, check filesystem format, and mount to cloud storage</p>
+              <h3 className="text-sm font-bold text-slate-200">Flashdisk Eksternal & Deteksi Format NTFS</h3>
+              <p className="text-xs text-slate-400">Deteksi otomatis flashdisk yang dicolokkan ke server, periksa format sistem berkas, dan pasang ke penyimpanan daring</p>
             </div>
             <button
               onClick={loadAllData}
-              className="px-3 py-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
+              className="px-3 py-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>Scan USB Ports</span>
+              <span>Pindai Port USB</span>
             </button>
           </div>
 
@@ -437,7 +475,7 @@ export default function AdminDashboard({ token, onClose }) {
               <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto text-slate-500">
                 <Usb className="w-8 h-8" />
               </div>
-              <h4 className="text-sm font-bold text-slate-200">No USB Flashdrives Detected</h4>
+              <h4 className="text-sm font-bold text-slate-200">Tidak Ada Flashdisk USB yang Terdeteksi</h4>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 Colokkan flashdisk (NTFS, FAT32, exFAT) ke port USB server atau PC Proxmox Anda. Sistem akan mendeteksinya secara otomatis.
               </p>
@@ -454,8 +492,8 @@ export default function AdminDashboard({ token, onClose }) {
                         <Usb className="w-5 h-5 text-blue-400" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-white">{usb.label || 'USB Flashdrive'}</h4>
-                        <p className="text-[11px] text-slate-400 font-mono">Device: {usb.name || usb.identifier}</p>
+                        <h4 className="text-sm font-bold text-white">{usb.label || 'Flashdisk USB'}</h4>
+                        <p className="text-[11px] text-slate-400 font-mono">Perangkat: {usb.name || usb.identifier}</p>
                       </div>
                     </div>
 
@@ -477,13 +515,13 @@ export default function AdminDashboard({ token, onClose }) {
                   {/* Drive Specs */}
                   <div className="p-3 bg-slate-950 rounded-xl border border-slate-850 grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Kapasitas / Size</span>
+                      <span className="text-[10px] text-slate-500 block">Kapasitas / Ukuran</span>
                       <span className="font-semibold text-slate-200">{formatBytes(usb.size)}</span>
                     </div>
                     <div>
-                      <span className="text-[10px] text-slate-500 block">Status Mount</span>
+                      <span className="text-[10px] text-slate-500 block">Status Terpasang (Mount)</span>
                       <span className={`font-semibold ${usb.isMounted ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        {usb.isMounted ? `Mounted (${usb.mount})` : 'Unmounted'}
+                        {usb.isMounted ? `Terpasang (${usb.mount})` : 'Belum Dipasang'}
                       </span>
                     </div>
                   </div>
@@ -498,16 +536,24 @@ export default function AdminDashboard({ token, onClose }) {
                             name: usb.label || 'usb_drive',
                             mountPath: usb.mount
                           }, authHeader);
-                          alert(res.data.message);
+                          setDialog({
+                            type: 'success',
+                            title: 'Status Flashdisk USB',
+                            message: res.data.message || 'Flashdisk berhasil dipasang dan siap diakses.'
+                          });
                           loadAllData();
                         } catch (err) {
-                          alert(err.response?.data?.error || 'Gagal mount USB');
+                          setDialog({
+                            type: 'error',
+                            title: 'Gagal Memasang Diska',
+                            message: err.response?.data?.error || 'Gagal memasang flashdisk USB.'
+                          });
                         }
                       }}
-                      className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/10"
+                      className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/10 cursor-pointer"
                     >
                       <HardDrive className="w-3.5 h-3.5" />
-                      <span>{usb.isMounted ? 'Remount / Check' : 'Mount Flashdisk'}</span>
+                      <span>{usb.isMounted ? 'Periksa / Pasang Ulang' : 'Pasang Flashdisk (Mount)'}</span>
                     </button>
                   </div>
                 </div>
@@ -527,7 +573,7 @@ export default function AdminDashboard({ token, onClose }) {
                 <code className="text-cyan-300 font-mono bg-slate-950 px-2 py-0.5 rounded ml-1">apt-get install -y ntfs-3g</code>
               </p>
               <p>
-                2. <strong>Passthrough USB ke LXC</strong>: Di Proxmox Host, Anda bisa langsung me-mount flashdisk ke container LXC menggunakan bind mount:
+                2. <strong>Passthrough USB ke LXC</strong>: Di Proxmox Host, Anda bisa langsung me-mount flashdisk ke wadah LXC menggunakan bind mount:
                 <code className="text-cyan-300 font-mono bg-slate-950 px-2 py-0.5 rounded ml-1">pct set &lt;VM_ID&gt; -mp0 /mnt/usb,mp=/media/usb</code>
               </p>
               <p>
@@ -541,16 +587,16 @@ export default function AdminDashboard({ token, onClose }) {
       {/* TAB 3: AUDIT LOGS */}
       {activeTab === 'logs' && (
         <div className="space-y-4">
-          <h3 className="text-sm font-bold text-slate-200">Security & Operational Activity Logs</h3>
+          <h3 className="text-sm font-bold text-slate-200">Catatan Aktivitas Operasional & Keamanan Server</h3>
           <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 text-[11px] font-semibold">
                 <tr>
-                  <th className="py-3 px-4 w-40">Timestamp</th>
-                  <th className="py-3 px-4 w-32">User</th>
-                  <th className="py-3 px-4 w-36">Action</th>
-                  <th className="py-3 px-4">Event Details</th>
-                  <th className="py-3 px-4 w-36 text-right">Client IP (CF)</th>
+                  <th className="py-3 px-4 w-40">Waktu</th>
+                  <th className="py-3 px-4 w-32">Pengguna</th>
+                  <th className="py-3 px-4 w-36">Aktivitas</th>
+                  <th className="py-3 px-4">Rincian Peristiwa</th>
+                  <th className="py-3 px-4 w-36 text-right">Alamat IP Klien (CF)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800 font-mono text-[11px]">
@@ -576,11 +622,11 @@ export default function AdminDashboard({ token, onClose }) {
       {/* TAB 4: SYSTEM SETTINGS */}
       {activeTab === 'settings' && (
         <div className="max-w-xl space-y-4">
-          <h3 className="text-sm font-bold text-slate-200">Global Storage & Reverse Proxy Settings</h3>
+          <h3 className="text-sm font-bold text-slate-200">Pengaturan Penyimpanan Global & Proksi Balik</h3>
           
           <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Server Brand Name</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Nama Merek / Judul Server</label>
               <input
                 type="text"
                 value={settings.app_name || ''}
@@ -590,7 +636,7 @@ export default function AdminDashboard({ token, onClose }) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Default User Quota (GB)</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Kuota Bawaan Pengguna Baru (GB)</label>
               <input
                 type="number"
                 value={settings.default_quota_gb || '15'}
@@ -601,8 +647,8 @@ export default function AdminDashboard({ token, onClose }) {
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800">
               <div>
-                <p className="text-xs font-semibold text-slate-200">Public Registration</p>
-                <p className="text-[10px] text-slate-400">Allow new visitors to register their own account</p>
+                <p className="text-xs font-semibold text-slate-200">Pendaftaran Akun Terbuka (Publik)</p>
+                <p className="text-[10px] text-slate-400">Izinkan pengunjung mendaftar akun sendiri tanpa perlu dibuatkan oleh administrator</p>
               </div>
               <input
                 type="checkbox"
@@ -614,8 +660,8 @@ export default function AdminDashboard({ token, onClose }) {
 
             <div className="flex items-center justify-between pt-2 border-t border-slate-800">
               <div>
-                <p className="text-xs font-semibold text-slate-200">WebDAV Storage Protocol</p>
-                <p className="text-[10px] text-slate-400">Enable network drive mapping for Windows, Mac, and mobile</p>
+                <p className="text-xs font-semibold text-slate-200">Protokol Penyimpanan WebDAV (Drive Z:)</p>
+                <p className="text-[10px] text-slate-400">Aktifkan pemetaan kandar jaringan untuk Windows Explorer, macOS Finder, dan ponsel</p>
               </div>
               <input
                 type="checkbox"
@@ -627,10 +673,32 @@ export default function AdminDashboard({ token, onClose }) {
 
             <button
               onClick={handleSaveSettings}
-              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-all mt-4"
+              className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-all mt-4 cursor-pointer"
             >
-              Save Configuration
+              Simpan Konfigurasi
             </button>
+          </div>
+
+          {/* Kartu Pencadangan Basis Data */}
+          <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                <Database className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white">Cadangan Basis Data & Metadata (Disaster Recovery)</h4>
+                <p className="text-[10px] text-slate-400">Unduh salinan berkas database SQLite untuk pemulihan cepat saat migrasi LXC Proxmox</p>
+              </div>
+            </div>
+
+            <a
+              href={`/api/admin/backup-db?token=${token}`}
+              download
+              className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer inline-flex"
+            >
+              <DownloadCloud className="w-4 h-4" />
+              <span>Unduh Cadangan Database (.sqlite)</span>
+            </a>
           </div>
         </div>
       )}
@@ -741,6 +809,9 @@ export default function AdminDashboard({ token, onClose }) {
           </div>
         </div>
       )}
+
+      {/* Modern Notification & Confirm Dialog Modal */}
+      <NotificationModal dialog={dialog} onClose={() => setDialog(null)} />
     </div>
   );
 }

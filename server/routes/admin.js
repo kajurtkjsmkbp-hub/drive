@@ -280,7 +280,7 @@ router.post('/usb/mount', (req, res) => {
   if (!isLinux) {
     // On Windows, flashdrives auto-mount to drive letters
     return res.json({
-      message: 'Flash drive is already mounted and accessible on Windows host',
+      message: 'Flashdisk telah terpasang secara otomatis dan dapat langsung diakses oleh sistem.',
       mountPath: mountPath || name
     });
   }
@@ -299,15 +299,32 @@ router.post('/usb/mount', (req, res) => {
     logActivity(req.user.id, req.user.username, 'MOUNT_USB', `Mounted USB ${device} to ${targetDir}`, req);
 
     res.json({
-      message: `USB mounted successfully to ${targetDir}`,
+      message: `Flashdisk berhasil dipasang ke direktori ${targetDir}`,
       mountPath: targetDir
     });
   } catch (err) {
     console.error('[Mount USB Error]', err);
     res.status(500).json({
-      error: `Failed to mount USB device: ${err.message}. Ensure ntfs-3g is installed if using NTFS.`
+      error: `Gagal memasang perangkat USB: ${err.message}. Pastikan paket driver ntfs-3g terpasang jika menggunakan format NTFS.`
     });
   }
+});
+
+// GET /api/admin/backup-db - One-click SQLite database backup
+router.get('/backup-db', (req, res) => {
+  const dbPath = path.join(__dirname, '..', '..', 'data', 'database.sqlite');
+  if (!fs.existsSync(dbPath)) {
+    return res.status(404).json({ error: 'Berkas database tidak ditemukan.' });
+  }
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const backupName = `AetherDrive-Backup-${dateStr}.sqlite`;
+
+  logActivity(req.user.id, req.user.username, 'BACKUP_DB', 'Mengunduh berkas cadangan database SQLite', req);
+
+  res.setHeader('Content-Disposition', `attachment; filename="${backupName}"`);
+  res.setHeader('Content-Type', 'application/x-sqlite3');
+  fs.createReadStream(dbPath).pipe(res);
 });
 
 module.exports = router;

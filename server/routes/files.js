@@ -43,29 +43,55 @@ router.get('/', authenticateToken, (req, res) => {
     const params = [userId];
 
     if (filter === 'trash') {
-      query += ' AND is_trashed = 1 ORDER BY trashed_at DESC';
+      query += ' AND is_trashed = 1';
     } else {
       query += ' AND is_trashed = 0';
 
       if (filter === 'starred') {
-        query += ' AND is_starred = 1 ORDER BY is_dir DESC, updated_at DESC';
+        query += ' AND is_starred = 1';
       } else if (filter === 'recent') {
-        query += ' AND is_dir = 0 ORDER BY updated_at DESC LIMIT 50';
+        query += ' AND is_dir = 0';
       } else if (search) {
-        query += ' AND name LIKE ? ORDER BY is_dir DESC, name ASC';
+        query += ' AND name LIKE ?';
         params.push(`%${search}%`);
+      } else if (type) {
+        // When category filter (Video, Gambar, Dokumen, dll) is active:
+        // If at root '/', search across all folders in drive like Google Drive!
+        // If inside a folder, search within that folder and all its subfolders!
+        if (parent === '/') {
+          query += ' AND is_dir = 0';
+        } else {
+          query += ' AND is_dir = 0 AND (parent_path = ? OR parent_path LIKE ?)';
+          params.push(parent, `${parent}/%`);
+        }
       } else {
         // Standard directory view
-        query += ' AND parent_path = ? ORDER BY is_dir DESC, name ASC';
+        query += ' AND parent_path = ?';
         params.push(parent);
       }
     }
 
     if (type && !filter) {
-      if (type === 'image') query += " AND mime_type LIKE 'image/%'";
-      else if (type === 'video') query += " AND mime_type LIKE 'video/%'";
-      else if (type === 'audio') query += " AND mime_type LIKE 'audio/%'";
-      else if (type === 'document') query += " AND (mime_type LIKE '%pdf%' OR mime_type LIKE '%text%' OR mime_type LIKE '%document%' OR mime_type LIKE '%sheet%')";
+      if (type === 'image') {
+        query += " AND (mime_type LIKE 'image/%' OR name LIKE '%.jpg' OR name LIKE '%.jpeg' OR name LIKE '%.png' OR name LIKE '%.gif' OR name LIKE '%.webp' OR name LIKE '%.svg' OR name LIKE '%.bmp')";
+      } else if (type === 'video') {
+        query += " AND (mime_type LIKE 'video/%' OR name LIKE '%.mp4' OR name LIKE '%.mkv' OR name LIKE '%.avi' OR name LIKE '%.mov' OR name LIKE '%.webm' OR name LIKE '%.wmv')";
+      } else if (type === 'audio') {
+        query += " AND (mime_type LIKE 'audio/%' OR name LIKE '%.mp3' OR name LIKE '%.wav' OR name LIKE '%.flac' OR name LIKE '%.ogg' OR name LIKE '%.m4a' OR name LIKE '%.aac')";
+      } else if (type === 'document') {
+        query += " AND (mime_type LIKE '%pdf%' OR mime_type LIKE '%text%' OR mime_type LIKE '%document%' OR mime_type LIKE '%sheet%' OR mime_type LIKE '%presentation%' OR name LIKE '%.pdf' OR name LIKE '%.doc' OR name LIKE '%.docx' OR name LIKE '%.xls' OR name LIKE '%.xlsx' OR name LIKE '%.ppt' OR name LIKE '%.pptx' OR name LIKE '%.txt' OR name LIKE '%.md' OR name LIKE '%.csv' OR name LIKE '%.odt' OR name LIKE '%.ods')";
+      } else if (type === 'archive') {
+        query += " AND (mime_type LIKE '%zip%' OR mime_type LIKE '%tar%' OR mime_type LIKE '%compressed%' OR name LIKE '%.zip' OR name LIKE '%.rar' OR name LIKE '%.7z' OR name LIKE '%.tar' OR name LIKE '%.gz' OR name LIKE '%.iso')";
+      }
+    }
+
+    // Append ORDER BY at the very end
+    if (filter === 'trash') {
+      query += ' ORDER BY trashed_at DESC';
+    } else if (filter === 'recent') {
+      query += ' ORDER BY updated_at DESC LIMIT 50';
+    } else {
+      query += ' ORDER BY is_dir DESC, name ASC';
     }
 
     const files = db.prepare(query).all(...params);
@@ -380,13 +406,39 @@ router.get('/download/:id', authenticateToken, (req, res) => {
 
   const stat = fs.statSync(file.disk_path);
   const fileSize = stat.size;
-  const range = req.headers.range;
+  const rangeHeader = req.headers.range;
 
-  // HTTP Range request for smooth Video/Audio seeking
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+  // HTTP Range request for smooth Video/Audio seeking (RFC 7233 compliant)
+  if (rangeHeader) {
+    const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+    if (!match) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+      return res.end();
+    }
+
+    let start;
+    let end;
+
+    if (match[1] === '') {
+      // Suffix range: bytes=-N (last N bytes of file, commonly used to read MP4 moov atom)
+      const suffix = parseInt(match[2], 10);
+      start = Math.max(0, fileSize - suffix);
+      end = fileSize - 1;
+    } else if (match[2] === '') {
+      // Open-ended range: bytes=N- (from N to end of file)
+      start = parseInt(match[1], 10);
+      end = fileSize - 1;
+    } else {
+      // Explicit range: bytes=N-M
+      start = parseInt(match[1], 10);
+      end = Math.min(parseInt(match[2], 10), fileSize - 1);
+    }
+
+    if (isNaN(start) || isNaN(end) || start > end || start >= fileSize) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+      return res.end();
+    }
+
     const chunksize = (end - start) + 1;
     const stream = fs.createReadStream(file.disk_path, { start, end });
 
@@ -394,14 +446,16 @@ router.get('/download/:id', authenticateToken, (req, res) => {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
-      'Content-Type': file.mime_type || 'application/octet-stream',
+      'Content-Type': file.mime_type || 'video/mp4',
     });
     stream.pipe(res);
   } else {
     res.writeHead(200, {
       'Content-Length': fileSize,
       'Content-Type': file.mime_type || 'application/octet-stream',
-      'Content-Disposition': req.query.view === 'inline' ? 'inline' : `attachment; filename="${encodeURIComponent(file.name)}"`
+      'Accept-Ranges': 'bytes',
+      'Content-Disposition': req.query.view === 'inline' ? 'inline' : `attachment; filename="${encodeURIComponent(file.name)}"`,
+      'Cache-Control': 'no-cache',
     });
     fs.createReadStream(file.disk_path).pipe(res);
   }
@@ -492,6 +546,186 @@ router.put('/rename/:id', authenticateToken, (req, res) => {
   } catch (err) {
     console.error('[Rename Error]', err);
     res.status(500).json({ error: 'Failed to rename item.' });
+  }
+});
+
+// GET /api/files/folders - List all non-trashed folders for folder picker / moving
+router.get('/folders', authenticateToken, (req, res) => {
+  try {
+    const folders = db.prepare('SELECT id, name, parent_path, path FROM files WHERE user_id = ? AND is_dir = 1 AND is_trashed = 0 ORDER BY path ASC').all(req.user.id);
+    res.json({ folders });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal mengambil daftar folder: ' + err.message });
+  }
+});
+
+// POST /api/files/move - Move file(s) or folder(s) to target folder
+router.post('/move', authenticateToken, (req, res) => {
+  const { ids, target_parent_path = '/' } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada berkas yang dipilih untuk dipindahkan.' });
+  }
+
+  const userRoot = getUserDiskRoot(req.user.username);
+  
+  // Verify target parent path exists (either '/' or a valid non-trashed folder)
+  let targetDiskDir = userRoot;
+  if (target_parent_path !== '/') {
+    const targetFolder = db.prepare('SELECT * FROM files WHERE user_id = ? AND path = ? AND is_dir = 1 AND is_trashed = 0')
+      .get(req.user.id, target_parent_path);
+    if (!targetFolder) {
+      return res.status(404).json({ error: 'Folder tujuan tidak ditemukan.' });
+    }
+    targetDiskDir = targetFolder.disk_path;
+  }
+
+  if (!fs.existsSync(targetDiskDir)) {
+    fs.mkdirSync(targetDiskDir, { recursive: true });
+  }
+
+  const movedItems = [];
+  const errors = [];
+
+  for (const fileId of ids) {
+    const file = db.prepare('SELECT * FROM files WHERE id = ? AND user_id = ? AND is_trashed = 0').get(fileId, req.user.id);
+    if (!file) {
+      errors.push(`Berkas ID ${fileId} tidak ditemukan.`);
+      continue;
+    }
+
+    // Cannot move to the exact same parent
+    if (file.parent_path === target_parent_path) {
+      continue;
+    }
+
+    // Cannot move a folder into itself or any of its subfolders
+    if (file.is_dir && (target_parent_path === file.path || target_parent_path.startsWith(file.path + '/'))) {
+      errors.push(`Tidak dapat memindahkan folder "${file.name}" ke dalam dirinya sendiri atau subfoldernya.`);
+      continue;
+    }
+
+    const newPath = target_parent_path === '/' ? `/${file.name}` : `${target_parent_path}/${file.name}`;
+    const newDiskPath = path.join(targetDiskDir, file.name);
+
+    // Collision check in destination
+    const existing = db.prepare('SELECT id FROM files WHERE user_id = ? AND parent_path = ? AND name = ? AND is_trashed = 0 AND id != ?')
+      .get(req.user.id, target_parent_path, file.name, file.id);
+    if (existing) {
+      errors.push(`Berkas atau folder dengan nama "${file.name}" sudah ada di folder tujuan.`);
+      continue;
+    }
+
+    try {
+      // Move on disk if source exists
+      if (fs.existsSync(file.disk_path)) {
+        fs.renameSync(file.disk_path, newDiskPath);
+      }
+
+      const oldPath = file.path;
+      const oldDiskPath = file.disk_path;
+
+      // Update file entry in database
+      db.prepare(`
+        UPDATE files 
+        SET parent_path = ?, path = ?, disk_path = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(target_parent_path, newPath, newDiskPath, file.id);
+
+      // If directory, recursively update all child records in database
+      if (file.is_dir) {
+        const children = db.prepare('SELECT * FROM files WHERE user_id = ? AND path LIKE ?').all(req.user.id, `${oldPath}/%`);
+        for (const child of children) {
+          const updatedChildPath = child.path.replace(oldPath, newPath);
+          const updatedChildParent = child.parent_path.replace(oldPath, newPath);
+          const updatedChildDisk = child.disk_path.replace(oldDiskPath, newDiskPath);
+          db.prepare('UPDATE files SET path = ?, parent_path = ?, disk_path = ? WHERE id = ?')
+            .run(updatedChildPath, updatedChildParent, updatedChildDisk, child.id);
+        }
+      }
+
+      movedItems.push({ id: file.id, name: file.name, oldPath, newPath });
+    } catch (moveErr) {
+      console.error('[Move Error]', moveErr);
+      errors.push(`Gagal memindahkan "${file.name}": ${moveErr.message}`);
+    }
+  }
+
+  logActivity(req.user.id, req.user.username, 'MOVE', `Memindahkan ${movedItems.length} item ke ${target_parent_path}`, req);
+
+  res.json({
+    message: `Berhasil memindahkan ${movedItems.length} berkas/folder.`,
+    moved: movedItems,
+    errors: errors.length > 0 ? errors : undefined
+  });
+});
+
+// POST /api/files/rescan - Rescan physical storage to sync external changes
+router.post('/rescan', authenticateToken, (req, res) => {
+  const userRoot = getUserDiskRoot(req.user.username);
+  let addedCount = 0;
+  let removedCount = 0;
+
+  try {
+    function scanDir(currentDir, currentParentPath) {
+      if (!fs.existsSync(currentDir)) return;
+      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+
+        const fullDiskPath = path.join(currentDir, entry.name);
+        const virtualPath = currentParentPath === '/' ? `/${entry.name}` : `${currentParentPath}/${entry.name}`;
+        const isDir = entry.isDirectory() ? 1 : 0;
+
+        let stat;
+        try {
+          stat = fs.statSync(fullDiskPath);
+        } catch {
+          continue;
+        }
+
+        const existing = db.prepare('SELECT id FROM files WHERE user_id = ? AND path = ? AND is_trashed = 0')
+          .get(req.user.id, virtualPath);
+
+        if (!existing) {
+          const mimeType = isDir ? 'directory' : (mime.lookup(entry.name) || 'application/octet-stream');
+          db.prepare(`
+            INSERT INTO files (user_id, name, parent_path, path, disk_path, size, mime_type, is_dir)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(req.user.id, entry.name, currentParentPath, virtualPath, fullDiskPath, isDir ? 0 : stat.size, mimeType, isDir);
+          addedCount++;
+        }
+
+        if (isDir) {
+          scanDir(fullDiskPath, virtualPath);
+        }
+      }
+    }
+
+    scanDir(userRoot, '/');
+
+    const allUserFiles = db.prepare('SELECT id, disk_path FROM files WHERE user_id = ? AND is_trashed = 0').all(req.user.id);
+    for (const f of allUserFiles) {
+      if (!fs.existsSync(f.disk_path)) {
+        db.prepare('DELETE FROM files WHERE id = ?').run(f.id);
+        removedCount++;
+      }
+    }
+
+    const newUsage = db.prepare('SELECT COALESCE(SUM(size), 0) as total FROM files WHERE user_id = ? AND is_trashed = 0').get(req.user.id).total;
+    db.prepare('UPDATE users SET used_bytes = ? WHERE id = ?').run(newUsage, req.user.id);
+
+    logActivity(req.user.id, req.user.username, 'RESCAN', `Pindai ulang berkas: +${addedCount} baru, -${removedCount} sinkronisasi`, req);
+
+    res.json({
+      message: `Pemindaian selesai: ${addedCount} berkas baru ditemukan, ${removedCount} berkas disinkronkan.`,
+      added: addedCount,
+      removed: removedCount,
+      total_used: newUsage
+    });
+  } catch (err) {
+    console.error('[Rescan Error]', err);
+    res.status(500).json({ error: 'Gagal memindai ulang berkas: ' + err.message });
   }
 });
 

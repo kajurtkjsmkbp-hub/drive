@@ -36,7 +36,7 @@ export default function Sidebar({
   ];
 
   return (
-    <aside className="w-64 border-r border-slate-800 bg-slate-900/70 backdrop-blur-sm flex flex-col justify-between shrink-0 select-none p-3 h-[calc(100vh-4rem)]">
+    <aside className="w-64 border-r border-slate-800 bg-slate-900/70 backdrop-blur-sm flex flex-col justify-between shrink-0 select-none p-3 h-full">
       
       {/* Bagian Atas: Tombol Aksi & Navigasi */}
       <div className="space-y-4">

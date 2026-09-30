@@ -41,8 +41,8 @@ export default function AuthModal({ onLoginSuccess }) {
             <div className="w-14 h-14 bg-white/10 backdrop-blur rounded-2xl border border-white/20 flex items-center justify-center mb-3 shadow-lg">
               <HardDrive className="w-8 h-8 text-cyan-300" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">AetherDrive Cloud</h1>
-            <p className="text-xs text-blue-100 font-medium mt-1">Platform Penyimpanan Cloud Proxmox & TrueNAS</p>
+            <h1 className="text-2xl font-bold tracking-tight">Khanza.NET <span className="text-cyan-300">DRIVE</span></h1>
+            <p className="text-xs text-blue-100 font-medium mt-1">Simpan di mana saja, unduh kapan saja. File aman, pikiran tenang</p>
           </div>
         </div>
 
@@ -142,10 +142,10 @@ export default function AuthModal({ onLoginSuccess }) {
             </button>
           </form>
 
-          {/* Info Kredensial Bawaan */}
+          {/* Footer Card */}
           <div className="mt-6 pt-4 border-t border-slate-800 text-center">
-            <p className="text-[11px] text-slate-400">
-              Administrator Bawaan: <span className="text-blue-400 font-mono font-bold">admin</span> / <span className="text-blue-400 font-mono font-bold">admin123</span>
+            <p className="text-[11px] text-slate-400 font-medium">
+              Khanza.NET DRIVE <span className="text-slate-500">— is a member of</span> <strong className="text-slate-300 font-semibold">PT.Khanza Digital Nusantara</strong>
             </p>
           </div>
         </div>

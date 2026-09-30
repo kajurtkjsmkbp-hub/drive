@@ -83,7 +83,7 @@ export default function WebDavModal({ user, onClose }) {
               {serverUrl}
             </p>
             <p className="text-[10px] text-slate-500 mt-2">
-              Autentikasi: Gunakan nama pengguna (<span className="text-blue-400 font-mono">{user?.username}</span>) dan kata sandi akun AetherDrive Anda.
+              Autentikasi: Gunakan nama pengguna (<span className="text-blue-400 font-mono">{user?.username}</span>) dan kata sandi akun Khanza.NET DRIVE Anda.
             </p>
           </div>
 
@@ -117,7 +117,7 @@ export default function WebDavModal({ user, onClose }) {
                   <li>Pilih Huruf Drive: <span className="text-cyan-400 font-mono">Z:</span></li>
                   <li>Pada kolom Folder, masukkan: <span className="text-cyan-400 font-mono">{serverUrl}</span></li>
                   <li>Beri tanda centang pada <span className="text-slate-200 font-medium">"Connect using different credentials"</span>.</li>
-                  <li>Klik <span className="text-slate-200 font-medium">Finish</span>, lalu masukkan nama pengguna dan kata sandi akun AetherDrive Anda.</li>
+                  <li>Klik <span className="text-slate-200 font-medium">Finish</span>, lalu masukkan nama pengguna dan kata sandi akun Khanza.NET DRIVE Anda.</li>
                 </ol>
               </div>
             </div>
@@ -171,7 +171,7 @@ export default function WebDavModal({ user, onClose }) {
                 Gunakan konfigurasi berikut untuk menghubungkan utilitas <span className="text-slate-200 font-medium">Rclone</span> secara otomatis ke server:
               </p>
               <pre className="p-3 bg-slate-900 rounded-xl font-mono text-[10px] text-cyan-300 overflow-x-auto">
-{`[aetherdrive]
+{`[khanzadrive]
 type = webdav
 url = ${serverUrl}
 vendor = other

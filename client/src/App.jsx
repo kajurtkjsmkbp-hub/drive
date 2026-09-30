@@ -9,8 +9,12 @@ import AdminDashboard from './components/AdminDashboard';
 import WebDavModal from './components/WebDavModal';
 import AuthModal from './components/AuthModal';
 import PublicShareView from './components/PublicShareView';
+import NotificationModal from './components/NotificationModal';
+import Toast from './components/Toast';
+import MoveModal from './components/MoveModal';
+import ProfileModal from './components/ProfileModal';
 import { uploadFileChunked } from './utils/format';
-import { Upload, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { Upload, X, CheckCircle, AlertCircle, Folder, FolderPlus, Edit3, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   // Check if current URL is a public share link (/share/:token)
@@ -47,6 +51,19 @@ export default function App() {
   const [previewFile, setPreviewFile] = useState(null);
   const [shareFile, setShareFile] = useState(null);
   const [webDavModalOpen, setWebDavModalOpen] = useState(false);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [moveFilesTarget, setMoveFilesTarget] = useState(null);
+  const [dialog, setDialog] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = (toast) => {
+    const id = Date.now() + Math.random();
+    setToasts(prev => [...prev, { id, ...toast }]);
+  };
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  };
 
   // Rename & New Folder Prompt State
   const [folderPromptOpen, setFolderPromptOpen] = useState(false);
@@ -102,14 +119,30 @@ export default function App() {
   };
 
   const handleRevokeShare = async (shareId) => {
-    if (confirm('Cabut tautan berbagi ini? Pengunjung tidak akan dapat lagi mengakses berkas.')) {
-      try {
-        await axios.delete(`/api/shares/${shareId}`, authHeaders);
-        fetchFiles();
-      } catch (err) {
-        alert('Gagal mencabut tautan');
+    setDialog({
+      type: 'confirm',
+      title: 'Cabut Tautan Berbagi?',
+      message: 'Apakah Anda yakin ingin mencabut tautan berbagi ini? Pengunjung tidak akan dapat lagi mengunduh atau mengakses berkas.',
+      confirmText: 'Ya, Cabut Tautan',
+      cancelText: 'Batal',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`/api/shares/${shareId}`, authHeaders);
+          setDialog({
+            type: 'success',
+            title: 'Tautan Dicabut',
+            message: 'Tautan berbagi berhasil dicabut dari sistem.'
+          });
+          fetchFiles();
+        } catch (err) {
+          setDialog({
+            type: 'error',
+            title: 'Gagal Mencabut Tautan',
+            message: 'Terjadi kendala saat mencabut tautan berbagi.'
+          });
+        }
       }
-    }
+    });
   };
 
   // Handle Logout
@@ -122,6 +155,9 @@ export default function App() {
 
   // Upload files handler with chunked Cloudflare support
   const handleUploadFiles = async (fileList) => {
+    let successCount = 0;
+    let errorCount = 0;
+
     for (const file of fileList) {
       const uploadId = `${Date.now()}_${file.name}`;
       
@@ -144,6 +180,8 @@ export default function App() {
           prev.map(u => (u.id === uploadId ? { ...u, progress: 100, status: 'completed' } : u))
         );
 
+        successCount++;
+
         // Auto remove from upload bar after 3 seconds
         setTimeout(() => {
           setActiveUploads(prev => prev.filter(u => u.id !== uploadId));
@@ -151,10 +189,30 @@ export default function App() {
 
         fetchFiles();
       } catch (err) {
+        errorCount++;
         setActiveUploads(prev =>
           prev.map(u => (u.id === uploadId ? { ...u, status: 'error', error: err.response?.data?.error || err.message } : u))
         );
       }
+    }
+
+    // Trigger modern toast notification upon upload completion
+    if (successCount > 0) {
+      addToast({
+        type: 'success',
+        title: 'Unggahan Berhasil!',
+        message: fileList.length === 1
+          ? `Berkas "${fileList[0].name}" telah berhasil diunggah.`
+          : `${successCount} berkas telah berhasil diunggah ke penyimpanan.`
+      });
+    }
+
+    if (errorCount > 0) {
+      addToast({
+        type: 'error',
+        title: 'Unggahan Gagal',
+        message: `${errorCount} berkas gagal diunggah. Periksa kuota atau koneksi Anda.`
+      });
     }
   };
 
@@ -173,7 +231,11 @@ export default function App() {
       setNewFolderName('');
       fetchFiles();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to create folder');
+      setDialog({
+        type: 'error',
+        title: 'Gagal Membuat Folder',
+        message: err.response?.data?.error || 'Terjadi kendala saat membuat folder baru.'
+      });
     }
   };
 
@@ -191,7 +253,11 @@ export default function App() {
       setRenameNewName('');
       fetchFiles();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to rename file');
+      setDialog({
+        type: 'error',
+        title: 'Gagal Mengubah Nama',
+        message: err.response?.data?.error || 'Nama berkas atau folder tidak dapat diubah.'
+      });
     }
   };
 
@@ -227,26 +293,66 @@ export default function App() {
 
   // Permanent Delete
   const handlePermanentDelete = async (file) => {
-    if (confirm(`Permanently delete "${file.name}"? This cannot be undone.`)) {
-      try {
-        await axios.delete(`/api/files/permanent/${file.id}`, authHeaders);
-        fetchFiles();
-      } catch (err) {
-        console.error(err);
+    setDialog({
+      type: 'confirm',
+      title: 'Hapus Berkas Permanen?',
+      message: `Hapus berkas "${file.name}" secara permanen? Berkas yang sudah dihapus tidak dapat dipulihkan kembali.`,
+      confirmText: 'Ya, Hapus Permanen',
+      cancelText: 'Batal',
+      onConfirm: async () => {
+        try {
+          await axios.delete(`/api/files/permanent/${file.id}`, authHeaders);
+          fetchFiles();
+        } catch (err) {
+          setDialog({
+            type: 'error',
+            title: 'Gagal Menghapus Berkas',
+            message: 'Terjadi kendala saat menghapus berkas permanen.'
+          });
+        }
       }
-    }
+    });
   };
 
   // Empty Trash
   const handleEmptyTrash = async () => {
-    if (confirm('Are you sure you want to empty the entire recycle bin?')) {
-      try {
-        await axios.delete('/api/files/trash/empty', authHeaders);
-        fetchFiles();
-      } catch (err) {
-        console.error(err);
+    setDialog({
+      type: 'confirm',
+      title: 'Kosongkan Tempat Sampah?',
+      message: 'Apakah Anda yakin ingin mengosongkan seluruh isi tempat sampah? Semua berkas di dalamnya akan terhapus selamanya.',
+      confirmText: 'Ya, Kosongkan',
+      cancelText: 'Batal',
+      onConfirm: async () => {
+        try {
+          await axios.delete('/api/files/trash/empty', authHeaders);
+          fetchFiles();
+        } catch (err) {
+          setDialog({
+            type: 'error',
+            title: 'Gagal Mengosongkan',
+            message: 'Terjadi kendala saat mengosongkan tempat sampah.'
+          });
+        }
       }
+    });
+  };
+
+  // Pindai Ulang Berkas Fisik di Server (Rescan Disk)
+  const handleRescanDisk = async () => {
+    try {
+      addToast({ type: 'info', message: 'Sedang memindai berkas fisik di server...' });
+      const res = await axios.post('/api/files/rescan', {}, authHeaders);
+      addToast({ type: 'success', message: res.data.message });
+      fetchFiles();
+    } catch (err) {
+      addToast({ type: 'error', message: err.response?.data?.error || 'Gagal memindai ulang berkas.' });
     }
+  };
+
+  // Berkas Berhasil Dipindahkan
+  const handleFilesMoved = (message) => {
+    addToast({ type: 'success', message });
+    fetchFiles();
   };
 
   // Download Single File
@@ -276,7 +382,11 @@ export default function App() {
       link.click();
       document.body.removeChild(link);
     } catch (err) {
-      alert('Failed to download batch zip');
+      setDialog({
+        type: 'error',
+        title: 'Gagal Mengunduh ZIP',
+        message: 'Gagal mengompresi dan mengunduh berkas batch terpilih.'
+      });
     }
   };
 
@@ -293,7 +403,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col selection:bg-blue-500 selection:text-white">
+    <div className="h-screen bg-slate-950 flex flex-col overflow-hidden selection:bg-blue-500 selection:text-white">
       
       {/* Top Navbar */}
       <Navbar
@@ -303,6 +413,7 @@ export default function App() {
         setViewMode={setViewMode}
         onOpenWebDav={() => setWebDavModalOpen(true)}
         onOpenAdmin={() => setCurrentTab('admin')}
+        onOpenProfile={() => setProfileModalOpen(true)}
         onLogout={handleLogout}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -311,7 +422,7 @@ export default function App() {
       />
 
       {/* Main Body */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         
         {/* Left Sidebar */}
         <Sidebar
@@ -339,6 +450,7 @@ export default function App() {
             setCurrentPath={setCurrentPath}
             currentTab={currentTab}
             viewMode={viewMode}
+            token={token}
             onPreviewFile={(file) => setPreviewFile(file)}
             onShareFile={(file) => setShareFile(file)}
             onDownloadFile={handleDownloadFile}
@@ -354,28 +466,71 @@ export default function App() {
             onPermanentDeleteFile={handlePermanentDelete}
             onEmptyTrash={handleEmptyTrash}
             onUploadFiles={handleUploadFiles}
+            onCreateFolder={() => setFolderPromptOpen(true)}
+            onMoveFiles={(filesToMove) => setMoveFilesTarget(filesToMove)}
+            onRescanDisk={handleRescanDisk}
+            activeFilter={activeFilter}
+            setActiveFilter={setActiveFilter}
           />
         )}
       </div>
 
+      {/* Catatan Kaki / Footer Bar */}
+      <footer className="h-8 border-t border-slate-800/80 bg-slate-900/90 backdrop-blur-md px-4 flex items-center justify-between text-[11px] text-slate-400 select-none shrink-0 z-20">
+        <div className="flex items-center gap-2 truncate">
+          <span className="font-extrabold text-slate-200">Khanza.NET <span className="text-blue-400">DRIVE</span></span>
+          <span className="text-slate-500">—</span>
+          <span className="text-slate-300 font-medium truncate">is a member of <strong className="text-slate-100 font-bold">PT.Khanza Digital Nusantara</strong></span>
+        </div>
+
+        <div className="hidden lg:flex items-center gap-3 text-[10px] text-slate-400">
+          <span className="flex items-center gap-1.5 text-emerald-400 font-medium bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Sistem Aktif & Terhubung
+          </span>
+          <span className="text-slate-600">•</span>
+          <span className="text-slate-400 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+            Keamanan Data Medis & Dokumen Terpercaya
+          </span>
+          <span className="text-slate-600">•</span>
+          <span className="text-slate-500">© 2026 PT. Khanza Digital Nusantara. Hak Cipta Dilindungi.</span>
+        </div>
+
+        <div className="lg:hidden text-[10px] text-slate-400 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Online</span>
+        </div>
+      </footer>
+
       {/* Upload Progress Drawer (Bottom Right) */}
       {activeUploads.length > 0 && (
-        <div className="fixed bottom-4 right-4 z-50 w-80 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200">
+        <div className="fixed bottom-11 right-4 z-50 w-84 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-4 space-y-3 animate-in slide-in-from-bottom duration-200">
           <div className="flex items-center justify-between text-xs font-bold text-white">
-            <span className="flex items-center gap-1.5">
-              <Upload className="w-3.5 h-3.5 text-blue-400 animate-bounce" />
-              Uploading {activeUploads.length} File(s)
+            <span className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-blue-400 animate-bounce" />
+              <span>Mengunggah {activeUploads.length} Berkas...</span>
             </span>
           </div>
 
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {activeUploads.map((up) => (
-              <div key={up.id} className="p-2 bg-slate-950 rounded-xl border border-slate-850">
-                <div className="flex items-center justify-between text-[11px] mb-1">
-                  <span className="font-semibold text-slate-200 truncate max-w-[170px]" title={up.name}>
+              <div key={up.id} className="p-2.5 bg-slate-950 rounded-xl border border-slate-850">
+                <div className="flex items-center justify-between text-[11px] mb-1.5">
+                  <span className="font-semibold text-slate-200 truncate max-w-[180px]" title={up.name}>
                     {up.name}
                   </span>
-                  <span className="text-blue-400 font-mono text-[10px]">{up.progress}%</span>
+                  {up.status === 'completed' ? (
+                    <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> 100% Selesai
+                    </span>
+                  ) : up.status === 'error' ? (
+                    <span className="text-[10px] font-bold text-rose-400 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> Gagal
+                    </span>
+                  ) : (
+                    <span className="text-blue-400 font-mono text-[10px]">{up.progress}%</span>
+                  )}
                 </div>
                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                   <div
@@ -395,14 +550,16 @@ export default function App() {
         </div>
       )}
 
-      {/* Preview Modal */}
+      {/* Preview Modal (with Gallery Next/Prev support) */}
       {previewFile && (
         <FilePreviewModal
           file={previewFile}
+          files={files}
           token={token}
           onClose={() => setPreviewFile(null)}
           onShare={(file) => setShareFile(file)}
           onDownload={handleDownloadFile}
+          onNavigateFile={(nextFile) => setPreviewFile(nextFile)}
         />
       )}
 
@@ -415,6 +572,31 @@ export default function App() {
         />
       )}
 
+      {/* Move Files Modal */}
+      {moveFilesTarget && (
+        <MoveModal
+          selectedFiles={moveFilesTarget}
+          token={token}
+          onClose={() => setMoveFilesTarget(null)}
+          onMoved={handleFilesMoved}
+        />
+      )}
+
+      {/* User Profile & Password Modal */}
+      {profileModalOpen && (
+        <ProfileModal
+          user={user}
+          storage={storage}
+          token={token}
+          onClose={() => setProfileModalOpen(false)}
+          onUpdated={(updatedUser) => {
+            setUser(updatedUser);
+            localStorage.setItem('aether_user', JSON.stringify(updatedUser));
+            addToast({ type: 'success', message: 'Profil berhasil diperbarui.' });
+          }}
+        />
+      )}
+
       {/* WebDAV / Desktop Mount Modal */}
       {webDavModalOpen && (
         <WebDavModal
@@ -423,34 +605,52 @@ export default function App() {
         />
       )}
 
-      {/* New Folder Modal */}
+      {/* Aesthetic New Folder Modal */}
       {folderPromptOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-            <h3 className="text-sm font-bold text-white mb-3">Create New Folder</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl relative overflow-hidden">
+            {/* Subtle Top Glow */}
+            <div className="absolute -top-12 -right-12 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-orange-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center mb-3 shadow-lg shadow-amber-500/10">
+                <FolderPlus className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-bold text-white tracking-tight">Buat Folder Baru</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Folder akan dibuat di direktori: <span className="text-amber-300 font-semibold">{currentPath === '/' ? 'Drive Utama' : currentPath}</span>
+              </p>
+            </div>
+
             <form onSubmit={handleCreateFolderSubmit} className="space-y-4">
-              <input
-                type="text"
-                autoFocus
-                required
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                placeholder="Folder name..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
-              />
-              <div className="flex items-center justify-end gap-2">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-amber-400">
+                  <Folder className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  autoFocus
+                  required
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="Ketik nama folder..."
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500/70 focus:ring-2 focus:ring-amber-500/20 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 transition-all outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setFolderPromptOpen(false)}
-                  className="px-3.5 py-2 text-xs text-slate-400 hover:text-white"
+                  className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs sm:text-sm font-semibold rounded-xl border border-slate-700 transition-all cursor-pointer"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md"
+                  className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
                 >
-                  Create
+                  Buat Folder
                 </button>
               </div>
             </form>
@@ -458,11 +658,20 @@ export default function App() {
         </div>
       )}
 
-      {/* Rename Modal */}
+      {/* Aesthetic Rename Modal */}
       {renameTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
-            <h3 className="text-sm font-bold text-white mb-3">Rename "{renameTarget.name}"</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl relative overflow-hidden">
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/30 text-blue-400 flex items-center justify-center mb-3 shadow-lg shadow-blue-500/10">
+                <Edit3 className="w-8 h-8" />
+              </div>
+              <h3 className="text-lg font-bold text-white tracking-tight">Ubah Nama Berkas</h3>
+              <p className="text-xs text-slate-400 mt-1 truncate max-w-xs">
+                Nama saat ini: <span className="text-slate-200 font-semibold">{renameTarget.name}</span>
+              </p>
+            </div>
+
             <form onSubmit={handleRenameSubmit} className="space-y-4">
               <input
                 type="text"
@@ -470,28 +679,35 @@ export default function App() {
                 required
                 value={renameNewName}
                 onChange={(e) => setRenameNewName(e.target.value)}
-                placeholder="New name..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                placeholder="Ketik nama baru..."
+                className="w-full bg-slate-950 border border-slate-800 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 transition-all outline-none"
               />
-              <div className="flex items-center justify-end gap-2">
+
+              <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setRenameTarget(null)}
-                  className="px-3.5 py-2 text-xs text-slate-400 hover:text-white"
+                  className="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs sm:text-sm font-semibold rounded-xl border border-slate-700 transition-all cursor-pointer"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md"
+                  className="flex-1 py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
                 >
-                  Rename
+                  Simpan Nama
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Modern Notification & Confirmation Dialog Modal */}
+      <NotificationModal dialog={dialog} onClose={() => setDialog(null)} />
+
+      {/* Floating Modern Toast Notification Stack */}
+      <Toast toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

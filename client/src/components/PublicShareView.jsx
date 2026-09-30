@@ -5,6 +5,7 @@ import {
   Film, Music, Image as ImageIcon, CheckCircle2, Shield
 } from 'lucide-react';
 import { formatBytes, formatDate, getFileCategory } from '../utils/format';
+import VideoPlayer from './VideoPlayer';
 
 export default function PublicShareView({ token }) {
   const [shareInfo, setShareInfo] = useState(null);
@@ -23,7 +24,7 @@ export default function PublicShareView({ token }) {
         setUnlocked(true);
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load shared link.');
+      setError(err.response?.data?.error || 'Tautan berbagi tidak dapat dimuat atau telah kadaluarsa.');
     } finally {
       setLoading(false);
     }
@@ -61,7 +62,7 @@ export default function PublicShareView({ token }) {
           <div className="w-16 h-16 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-red-400">
             <AlertCircle className="w-8 h-8" />
           </div>
-          <h2 className="text-lg font-bold text-white mb-2">Link Unavailable</h2>
+          <h2 className="text-lg font-bold text-white mb-2">Tautan Tidak Tersedia</h2>
           <p className="text-xs text-slate-400">{error}</p>
         </div>
       </div>
@@ -79,24 +80,24 @@ export default function PublicShareView({ token }) {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-md">
             <HardDrive className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold text-base tracking-tight text-white">AetherDrive Cloud</span>
+          <span className="font-bold text-base tracking-tight text-white">Khanza.NET <span className="text-blue-400">DRIVE</span> Online</span>
         </div>
         <span className="text-xs text-slate-400">
-          Shared by <span className="font-semibold text-blue-400">{shareInfo.owner_name}</span>
+          Dibagikan oleh <span className="font-semibold text-blue-400">{shareInfo.owner_name}</span>
         </span>
       </header>
 
       {/* Main Body */}
-      <main className="flex-1 max-w-4xl w-full mx-auto p-6 flex flex-col justify-center">
+      <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 flex flex-col justify-center">
         {shareInfo.requires_password && !unlocked ? (
           /* Password Protected Card */
           <div className="w-full max-w-md mx-auto bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl">
             <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-amber-400">
               <Lock className="w-7 h-7" />
             </div>
-            <h2 className="text-lg font-bold text-white text-center mb-1">Password Protected</h2>
+            <h2 className="text-lg font-bold text-white text-center mb-1">Tautan Terkunci Kata Sandi</h2>
             <p className="text-xs text-slate-400 text-center mb-6">
-              Enter the passcode required to view or download "{shareInfo.file_name}".
+              Masukkan kata sandi pengaman untuk melihat atau mengunduh "{shareInfo.file_name}".
             </p>
 
             <form onSubmit={handleUnlock} className="space-y-4">
@@ -105,14 +106,14 @@ export default function PublicShareView({ token }) {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password..."
+                placeholder="Masukkan kata sandi..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
               />
               <button
                 type="submit"
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-all"
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-500/20 transition-all cursor-pointer"
               >
-                Unlock File
+                Buka Kunci Berkas
               </button>
             </form>
           </div>
@@ -125,7 +126,7 @@ export default function PublicShareView({ token }) {
               <div className="truncate max-w-md">
                 <h1 className="text-lg font-bold text-white truncate">{shareInfo.file_name}</h1>
                 <p className="text-xs text-slate-400 mt-1">
-                  Size: <span className="text-slate-200 font-semibold">{formatBytes(shareInfo.size)}</span> • Shared on {formatDate(shareInfo.created_at).split(',')[0]}
+                  Ukuran: <span className="text-slate-200 font-semibold">{formatBytes(shareInfo.size)}</span> • Dibagikan pada {formatDate(shareInfo.created_at).split(',')[0]}
                 </p>
               </div>
 
@@ -133,36 +134,34 @@ export default function PublicShareView({ token }) {
                 <a
                   href={getDownloadUrl()}
                   download
-                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-all"
+                  className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-500/20 flex items-center gap-2 transition-all cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Download {shareInfo.is_dir ? 'ZIP' : 'File'}</span>
+                  <span>Unduh {shareInfo.is_dir ? 'ZIP' : 'Berkas'}</span>
                 </a>
               )}
             </div>
 
             {/* Media / File Viewer */}
-            <div className="p-6 flex items-center justify-center min-h-[350px] bg-slate-950/50">
+            <div className="p-4 sm:p-6 flex items-center justify-center min-h-[350px] bg-slate-950/50">
               {category === 'image' && (
                 <img
                   src={getStreamUrl()}
                   alt={shareInfo.file_name}
-                  className="max-h-[60vh] max-w-full rounded-2xl object-contain shadow-lg"
+                  className="max-h-[65vh] max-w-full rounded-2xl object-contain shadow-lg"
                 />
               )}
 
               {category === 'video' && (
-                <video
-                  src={getStreamUrl()}
-                  controls
-                  className="max-h-[60vh] max-w-full rounded-2xl bg-black border border-slate-800 shadow-xl"
-                />
+                <div className="w-full">
+                  <VideoPlayer src={getStreamUrl()} fileName={shareInfo.file_name} />
+                </div>
               )}
 
               {category === 'audio' && (
-                <div className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-3xl text-center">
+                <div className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 rounded-3xl text-center shadow-xl">
                   <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4">
-                    <Music className="w-8 h-8 text-emerald-400" />
+                    <Music className="w-8 h-8 text-emerald-400 animate-pulse" />
                   </div>
                   <audio src={getStreamUrl()} controls className="w-full rounded-xl" />
                 </div>
@@ -182,7 +181,7 @@ export default function PublicShareView({ token }) {
                     <FileText className="w-10 h-10" />
                   </div>
                   <p className="text-xs text-slate-400">
-                    This file is ready for download. Click the download button above to retrieve it.
+                    Berkas ini siap untuk diunduh. Klik tombol unduh di atas untuk menyimpannya ke komputer Anda.
                   </p>
                 </div>
               )}
@@ -192,8 +191,16 @@ export default function PublicShareView({ token }) {
       </main>
 
       {/* Footer */}
-      <footer className="h-14 border-t border-slate-800/80 px-6 flex items-center justify-center text-[11px] text-slate-500">
-        <span>Protected with Proxmox LXC Storage & Cloudflare Zero Trust</span>
+      <footer className="h-14 border-t border-slate-800/80 px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-slate-500">
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-slate-300">Khanza.NET DRIVE</span>
+          <span>— is a member of <strong className="text-slate-300 font-semibold">PT.Khanza Digital Nusantara</strong></span>
+        </div>
+        <div className="flex items-center gap-2 text-slate-500 text-[10px]">
+          <span>Simpan di mana saja, unduh kapan saja. File aman, pikiran tenang</span>
+          <span className="hidden md:inline">•</span>
+          <span className="hidden md:inline">© 2026 PT. Khanza Digital Nusantara</span>
+        </div>
       </footer>
     </div>
   );

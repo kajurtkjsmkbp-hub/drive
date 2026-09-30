@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Folder, FileText, Image, Film, Music, Archive, File, 
   MoreVertical, Download, Share2, Star, Trash2, Edit3, 
   RotateCcw, FolderPlus, Upload, ChevronRight, Eye, CheckSquare, 
-  Square, AlertTriangle, ArrowUpDown, Clock, Copy, Check, Lock, Globe, HardDrive
+  Square, AlertTriangle, ArrowUpDown, Clock, Copy, Check, Lock, 
+  Globe, HardDrive, FolderInput, RefreshCw, Layers
 } from 'lucide-react';
 import { formatBytes, formatDate, getFileCategory } from '../utils/format';
 
@@ -14,6 +15,7 @@ export default function FileExplorer({
   setCurrentPath,
   currentTab = 'drive',
   viewMode = 'grid',
+  token = '',
   onPreviewFile,
   onShareFile,
   onDownloadFile,
@@ -25,12 +27,18 @@ export default function FileExplorer({
   onRestoreFile,
   onPermanentDeleteFile,
   onEmptyTrash,
-  onUploadFiles
+  onUploadFiles,
+  onCreateFolder,
+  onMoveFiles,
+  onRescanDisk,
+  activeFilter = '',
+  setActiveFilter
 }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [copiedShareId, setCopiedShareId] = useState(null);
+  const fileInputExplorerRef = useRef(null);
 
   // Helper render ikon kategori berkas
   const renderFileIcon = (file) => {
@@ -97,23 +105,43 @@ export default function FileExplorer({
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.length === files.length) {
+    if (selectedIds.length === displayedFiles.length) {
       setSelectedIds([]);
     } else {
-      setSelectedIds(files.map(f => f.id));
+      setSelectedIds(displayedFiles.map(f => f.id));
     }
   };
 
-  const copyShareUrl = (token, shareId) => {
-    const url = `${window.location.origin}/share/${token}`;
+  const copyShareUrl = (tokenStr, shareId) => {
+    const url = `${window.location.origin}/share/${tokenStr}`;
     navigator.clipboard.writeText(url);
     setCopiedShareId(shareId);
     setTimeout(() => setCopiedShareId(null), 2000);
   };
 
+  // Filter files according to active filter
+  const displayedFiles = files.filter((file) => {
+    if (!activeFilter) return true;
+    if (file.is_dir) return false;
+    const cat = getFileCategory(file.name, file.mime_type);
+    if (activeFilter === 'document') {
+      return ['document', 'pdf', 'code'].includes(cat);
+    }
+    return cat === activeFilter;
+  });
+
+  const filterTabs = [
+    { id: '', label: 'Semua' },
+    { id: 'image', label: 'Gambar' },
+    { id: 'video', label: 'Video' },
+    { id: 'document', label: 'Dokumen' },
+    { id: 'audio', label: 'Audio' },
+    { id: 'archive', label: 'Arsip' },
+  ];
+
   return (
     <div 
-      className={`flex-1 flex flex-col h-[calc(100vh-4rem)] overflow-y-auto relative transition-colors select-none ${
+      className={`flex-1 flex flex-col h-full overflow-y-auto relative transition-colors select-none ${
         dragOver ? 'bg-blue-950/30 border-2 border-dashed border-blue-500' : 'bg-slate-950'
       }`}
       onDragOver={handleDragOver}
@@ -127,7 +155,7 @@ export default function FileExplorer({
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-blue-900/40 backdrop-blur-sm pointer-events-none">
           <Upload className="w-16 h-16 text-blue-400 animate-bounce mb-3" />
           <h2 className="text-xl font-bold text-white">Lepaskan berkas di sini untuk mengunggah</h2>
-          <p className="text-xs text-blue-200 mt-1">Berkas akan diunggah secara bertahap (chunked) ke Proxmox Cloud Storage</p>
+          <p className="text-xs text-blue-200 mt-1">Berkas akan diunggah langsung ke Khanza.NET DRIVE</p>
         </div>
       )}
 
@@ -210,8 +238,10 @@ export default function FileExplorer({
           )}
         </div>
 
-        {/* Tombol Aksi Massal */}
+        {/* Tombol Aksi Toolbar */}
         <div className="flex items-center gap-2">
+          
+          {/* Multi-select Batch Actions */}
           {selectedIds.length > 0 && (
             <div className="flex items-center gap-2 bg-blue-500/15 border border-blue-500/30 px-3 py-1 rounded-xl">
               <span className="text-xs text-blue-300 font-semibold">
@@ -225,6 +255,19 @@ export default function FileExplorer({
                 <Download className="w-3.5 h-3.5" />
                 <span>Unduh ZIP</span>
               </button>
+              {currentTab !== 'trash' && onMoveFiles && (
+                <button
+                  onClick={() => {
+                    const selectedFilesList = files.filter(f => selectedIds.includes(f.id));
+                    onMoveFiles(selectedFilesList);
+                  }}
+                  className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-semibold px-2 py-0.5 rounded hover:bg-indigo-500/20 transition-colors cursor-pointer"
+                  title="Pindahkan berkas terpilih ke folder lain"
+                >
+                  <FolderInput className="w-3.5 h-3.5" />
+                  <span>Pindahkan</span>
+                </button>
+              )}
             </div>
           )}
 
@@ -238,13 +281,60 @@ export default function FileExplorer({
             </button>
           )}
 
+          {/* Tombol Aksi Cepat (Folder Baru, Unggah Berkas, Pindai Disk) */}
+          {currentTab === 'drive' && (
+            <div className="flex items-center gap-2">
+              {onRescanDisk && (
+                <button
+                  onClick={onRescanDisk}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
+                  title="Pindai ulang berkas fisik di server untuk mendeteksi perubahan dari WebDAV atau hard disk eksternal"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden md:inline">Pindai Disk</span>
+                </button>
+              )}
+
+              <button
+                onClick={onCreateFolder}
+                className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
+                title="Buat Folder Baru"
+              >
+                <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+                <span>+ Folder Baru</span>
+              </button>
+              
+              <button
+                onClick={() => fileInputExplorerRef.current?.click()}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/20 cursor-pointer active:scale-95"
+                title="Unggah berkas dari komputer"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Unggah Berkas</span>
+              </button>
+
+              <input
+                type="file"
+                multiple
+                ref={fileInputExplorerRef}
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    onUploadFiles(Array.from(e.target.files));
+                    e.target.value = '';
+                  }
+                }}
+              />
+            </div>
+          )}
+
           {currentTab !== 'shared' && files.length > 0 && (
             <button
               onClick={toggleSelectAll}
               className="p-1.5 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
-              title={selectedIds.length === files.length ? 'Batal Pilih Semua' : 'Pilih Semua'}
+              title={selectedIds.length === displayedFiles.length ? 'Batal Pilih Semua' : 'Pilih Semua'}
             >
-              {selectedIds.length === files.length ? (
+              {selectedIds.length === displayedFiles.length ? (
                 <CheckSquare className="w-4 h-4 text-blue-400" />
               ) : (
                 <Square className="w-4 h-4" />
@@ -254,126 +344,192 @@ export default function FileExplorer({
         </div>
       </div>
 
+      {/* Bilah Filter Kategori Cepat (Quick Filters) */}
+      {currentTab !== 'shared' && files.length > 0 && (
+        <div className="px-6 pt-3 pb-1 flex items-center gap-2 overflow-x-auto select-none">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mr-1 flex items-center gap-1">
+            <Layers className="w-3 h-3 text-slate-500" />
+            Filter:
+          </span>
+          {filterTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveFilter && setActiveFilter(tab.id)}
+              className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                activeFilter === tab.id
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Konten Utama */}
       <div className="p-6 flex-1">
         
         {/* TAMPILAN KHUSUS TAB TAUTAN BERBAGI (SHARED LINKS) */}
         {currentTab === 'shared' ? (
           shares.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="w-20 h-20 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4 text-cyan-400">
-                <Share2 className="w-10 h-10" />
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-3 text-slate-600">
+                <Share2 className="w-8 h-8" />
               </div>
-              <h3 className="text-base font-bold text-slate-200">Belum Ada Tautan Berbagi Aktif</h3>
-              <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                Klik ikon "Bagikan Tautan" pada berkas apa pun di Drive Saya untuk membuat tautan publik yang dapat diakses secara lokal maupun via Cloudflare.
+              <h3 className="text-sm font-bold text-slate-300">Belum Ada Tautan Berbagi Aktif</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                Klik ikon bagikan pada berkas atau folder apa pun untuk membuat tautan publik yang dapat diakses oleh orang lain.
               </p>
             </div>
           ) : (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950 border-b border-slate-800 text-slate-400 text-[11px] font-semibold">
-                  <tr>
-                    <th className="py-3 px-4">Nama Berkas</th>
-                    <th className="py-3 px-4">Tautan Berbagi (URL)</th>
-                    <th className="py-3 px-4 w-32">Kata Sandi</th>
-                    <th className="py-3 px-4 w-36">Kedaluwarsa</th>
-                    <th className="py-3 px-4 w-24">Dilihat</th>
-                    <th className="py-3 px-4 w-28 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 text-xs">
-                  {shares.map((share) => (
-                    <tr key={share.id} className="hover:bg-slate-800/40">
-                      <td className="py-3 px-4 font-semibold text-slate-200">
-                        {share.file_name}
-                      </td>
-                      <td className="py-3 px-4 font-mono text-cyan-300">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate max-w-xs">{window.location.origin}/share/{share.share_token}</span>
-                          <button
-                            onClick={() => copyShareUrl(share.share_token, share.id)}
-                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] rounded-lg flex items-center gap-1 font-sans cursor-pointer transition-colors"
-                          >
-                            {copiedShareId === share.id ? (
-                              <Check className="w-3 h-3 text-emerald-400" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                            <span>{copiedShareId === share.id ? 'Tersalin' : 'Salin'}</span>
-                          </button>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        {share.password_hash ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                            Dilindungi Sandi
-                          </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {shares.map((share) => (
+                <div 
+                  key={share.id}
+                  className="p-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-sm hover:border-slate-700 transition-colors flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {share.is_dir ? (
+                          <Folder className="w-5 h-5 text-amber-400" />
                         ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400">
-                            Terbuka
-                          </span>
+                          <FileText className="w-5 h-5 text-blue-400" />
                         )}
-                      </td>
-                      <td className="py-3 px-4 text-slate-400">
-                        {share.expires_at ? formatDate(share.expires_at).split(',')[0] : 'Permanen'}
-                      </td>
-                      <td className="py-3 px-4 text-slate-300 font-bold">
-                        {share.view_count || 0} kali
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => onRevokeShare(share.id)}
-                          className="px-2.5 py-1 text-red-400 hover:bg-red-500/10 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                        >
-                          Cabut Tautan
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <span className="font-semibold text-xs text-white truncate max-w-[180px]">
+                          {share.file_name}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => onRevokeShare(share.id)}
+                        className="p-1 text-slate-500 hover:text-red-400 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                        title="Cabut / Hapus Tautan Berbagi"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 text-[11px] text-slate-400 my-3">
+                      <div className="flex items-center gap-1.5">
+                        <Globe className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="truncate">Token: {share.share_token}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Proteksi Kata Sandi: {share.has_password ? 'Ya' : 'Tidak'}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Kadaluarsa: {share.expires_at ? formatDate(share.expires_at) : 'Selamanya'}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Dilihat: {share.view_count || 0} kali</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => copyShareUrl(share.share_token, share.id)}
+                      className="flex-1 py-1.5 px-3 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      {copiedShareId === share.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Tersalin!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Salin Tautan</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )
         ) : (
-          /* TAMPILAN BERKAS & FOLDER (DRIVE, TERBARU, BERBINTANG, SAMPAH) */
-          files.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <div className="w-20 h-20 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4 text-slate-600">
-                {currentTab === 'trash' ? (
-                  <Trash2 className="w-10 h-10 text-slate-500" />
-                ) : currentTab === 'starred' ? (
-                  <Star className="w-10 h-10 text-slate-500" />
-                ) : currentTab === 'recent' ? (
-                  <Clock className="w-10 h-10 text-slate-500" />
-                ) : (
-                  <FolderPlus className="w-10 h-10 text-slate-500" />
-                )}
+          /* TAMPILAN BERKAS & FOLDER BIASA */
+          displayedFiles.length === 0 ? (
+            currentTab === 'drive' ? (
+              /* Desain Folder Kosong Estetik dengan Dropzone */
+              <div className="flex flex-col items-center justify-center py-16 px-4">
+                <div className="w-full max-w-lg p-8 sm:p-10 bg-slate-900/60 border-2 border-dashed border-slate-800 hover:border-blue-500/50 rounded-3xl text-center space-y-4 transition-all group backdrop-blur-sm relative overflow-hidden shadow-2xl">
+                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                  <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-600/20 to-indigo-600/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-all shadow-xl shadow-blue-500/5">
+                    <Upload className="w-10 h-10" />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                      {activeFilter ? 'Tidak Ada Berkas yang Cocok dengan Filter' : 'Folder Ini Masih Kosong'}
+                    </h3>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                      {activeFilter 
+                        ? 'Tidak ditemukan berkas bertipe ini di dalam folder. Coba pilih filter "Semua".'
+                        : 'Tarik dan lepaskan berkas dari komputer Anda ke sini, atau pilih tindakan cepat di bawah:'}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                    <button
+                      onClick={() => fileInputExplorerRef.current?.click()}
+                      className="py-2.5 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Unggah Berkas Sekarang</span>
+                    </button>
+                    <button
+                      onClick={onCreateFolder}
+                      className="py-2.5 px-5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+                    >
+                      <FolderPlus className="w-4 h-4 text-amber-400" />
+                      <span>+ Buat Folder Baru</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <h3 className="text-base font-bold text-slate-300">
-                {currentTab === 'trash'
-                  ? 'Tempat Sampah Saat Ini Kosong'
-                  : currentTab === 'starred'
-                  ? 'Belum Ada Berkas yang Ditandai Bintang'
-                  : currentTab === 'recent'
-                  ? 'Belum Ada Riwayat Berkas Terbaru'
-                  : 'Folder Ini Masih Kosong'}
-              </h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                {currentTab === 'trash'
-                  ? 'Berkas yang Anda hapus sementara akan ditampung di sini.'
-                  : currentTab === 'starred'
-                  ? 'Tandai berkas penting dengan bintang agar mudah diakses kembali.'
-                  : currentTab === 'recent'
-                  ? 'Berkas yang baru saja diunggah akan otomatis ditampilkan di sini.'
-                  : 'Tarik berkas dari komputer Anda ke sini atau gunakan tombol "Tambah Berkas".'}
-              </p>
-            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="w-20 h-20 rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-4 text-slate-600">
+                  {currentTab === 'trash' ? (
+                    <Trash2 className="w-10 h-10 text-slate-500" />
+                  ) : currentTab === 'starred' ? (
+                    <Star className="w-10 h-10 text-slate-500" />
+                  ) : (
+                    <Clock className="w-10 h-10 text-slate-500" />
+                  )}
+                </div>
+                <h3 className="text-base font-bold text-slate-300">
+                  {currentTab === 'trash'
+                    ? 'Tempat Sampah Saat Ini Kosong'
+                    : currentTab === 'starred'
+                    ? 'Belum Ada Berkas yang Ditandai Bintang'
+                    : 'Belum Ada Riwayat Berkas Terbaru'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                  {currentTab === 'trash'
+                    ? 'Berkas yang Anda hapus sementara akan ditampung di sini.'
+                    : currentTab === 'starred'
+                    ? 'Tandai berkas penting dengan bintang agar mudah diakses kembali.'
+                    : 'Berkas yang baru saja diunggah akan otomatis ditampilkan di sini.'}
+                </p>
+              </div>
+            )
           ) : viewMode === 'grid' ? (
-            /* TAMPILAN KARTU / GRID */
+            /* TAMPILAN KARTU / GRID DENGAN THUMBNAIL */
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {files.map((file) => {
+              {displayedFiles.map((file) => {
                 const isSelected = selectedIds.includes(file.id);
+                const isImage = !file.is_dir && getFileCategory(file.name, file.mime_type) === 'image';
+                const thumbnailUrl = `/api/files/download/${file.id}?token=${token}&view=inline`;
+
                 return (
                   <div
                     key={file.id}
@@ -384,10 +540,10 @@ export default function FileExplorer({
                         onPreviewFile(file);
                       }
                     }}
-                    className={`group relative p-3.5 rounded-2xl border transition-colors cursor-pointer select-none flex flex-col justify-between ${
+                    className={`group relative p-3 rounded-2xl border transition-all cursor-pointer select-none flex flex-col justify-between ${
                       isSelected
-                        ? 'bg-blue-600/15 border-blue-500'
-                        : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900'
+                        ? 'bg-blue-600/15 border-blue-500 shadow-md shadow-blue-500/10'
+                        : 'bg-slate-900/70 border-slate-800 hover:border-slate-700 hover:bg-slate-900 shadow-sm'
                     }`}
                   >
                     {/* Header Kartu */}
@@ -418,9 +574,25 @@ export default function FileExplorer({
                       </div>
                     </div>
 
-                    {/* Ikon Berkas */}
-                    <div className="flex items-center justify-center py-4">
-                      {renderFileIcon(file)}
+                    {/* Area Ikon / Thumbnail Foto */}
+                    <div className="flex items-center justify-center py-2 h-24 overflow-hidden rounded-xl bg-slate-950/40 relative">
+                      {isImage ? (
+                        <img
+                          src={thumbnailUrl}
+                          alt={file.name}
+                          loading="lazy"
+                          className="w-full h-full object-cover rounded-xl transition-transform group-hover:scale-105 duration-200"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextSibling) {
+                              e.target.nextSibling.style.display = 'flex';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <div className={isImage ? 'hidden' : 'flex items-center justify-center'}>
+                        {renderFileIcon(file)}
+                      </div>
                     </div>
 
                     {/* Info Berkas */}
@@ -468,6 +640,16 @@ export default function FileExplorer({
                               <span>Bagikan Tautan</span>
                             </button>
 
+                            {onMoveFiles && (
+                              <button
+                                onClick={() => { setActiveMenuId(null); onMoveFiles([file]); }}
+                                className="w-full px-3 py-1.5 text-xs text-left text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
+                              >
+                                <FolderInput className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>Pindahkan ke...</span>
+                              </button>
+                            )}
+
                             <button
                               onClick={() => { setActiveMenuId(null); onToggleStar(file); }}
                               className="w-full px-3 py-1.5 text-xs text-left text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
@@ -480,7 +662,7 @@ export default function FileExplorer({
                               onClick={() => { setActiveMenuId(null); onRenameFile(file); }}
                               className="w-full px-3 py-1.5 text-xs text-left text-slate-300 hover:bg-slate-800 flex items-center gap-2 cursor-pointer"
                             >
-                              <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+                              <Edit3 className="w-3.5 h-3.5 text-blue-400" />
                               <span>Ganti Nama</span>
                             </button>
 
@@ -523,19 +705,19 @@ export default function FileExplorer({
             </div>
           ) : (
             /* TAMPILAN TABEL / LIST VIEW */
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800 text-[11px] font-semibold text-slate-400 bg-slate-950">
+                  <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400 bg-slate-950/60 uppercase tracking-wider">
                     <th className="py-3 px-4 w-10"></th>
                     <th className="py-3 px-4">Nama Berkas</th>
                     <th className="py-3 px-4 w-32">Ukuran</th>
                     <th className="py-3 px-4 w-44">Terakhir Diubah</th>
-                    <th className="py-3 px-4 w-28 text-right">Aksi</th>
+                    <th className="py-3 px-4 w-36 text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800 text-xs">
-                  {files.map((file) => {
+                  {displayedFiles.map((file) => {
                     const isSelected = selectedIds.includes(file.id);
                     return (
                       <tr
@@ -586,6 +768,15 @@ export default function FileExplorer({
                                 >
                                   <Download className="w-3.5 h-3.5" />
                                 </button>
+                                {onMoveFiles && (
+                                  <button
+                                    onClick={() => onMoveFiles([file])}
+                                    className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                    title="Pindahkan ke Folder Lain"
+                                  >
+                                    <FolderInput className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => onShareFile(file)}
                                   className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"

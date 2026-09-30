@@ -1,0 +1,22 @@
+{
+  "short_name": "Khanza DRIVE",
+  "name": "Khanza.NET DRIVE Online",
+  "description": "Simpan di mana saja, unduh kapan saja. File aman, pikiran tenang",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#020617",
+  "theme_color": "#020617",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
