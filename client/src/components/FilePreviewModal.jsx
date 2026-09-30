@@ -18,11 +18,44 @@ export default function FilePreviewModal({
 }) {
   const [textContent, setTextContent] = useState('');
   const [loadingText, setLoadingText] = useState(false);
+  const [blobUrl, setBlobUrl] = useState('');
+  const [loadingBlob, setLoadingBlob] = useState(false);
+  const [blobError, setBlobError] = useState('');
 
   if (!file) return null;
 
   const category = getFileCategory(file.name, file.mime_type);
   const streamUrl = `/api/files/download/${file.id}?token=${encodeURIComponent(token || '')}&view=inline`;
+
+  // Fetch blob with Authorization header for PDF/image to avoid URL token issues
+  useEffect(() => {
+    let currentObjectUrl = '';
+    if (category === 'pdf' || category === 'image') {
+      setLoadingBlob(true);
+      setBlobError('');
+      axios.get(`/api/files/download/${file.id}?view=inline`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      .then(res => {
+        const mimeType = category === 'pdf' ? 'application/pdf' : (file.mime_type || 'image/jpeg');
+        const blob = new Blob([res.data], { type: mimeType });
+        currentObjectUrl = URL.createObjectURL(blob);
+        setBlobUrl(currentObjectUrl);
+      })
+      .catch(err => {
+        console.error('Failed to load blob preview:', err);
+        setBlobError('Gagal memuat pratinjau: ' + (err.response?.data?.error || err.message));
+      })
+      .finally(() => setLoadingBlob(false));
+    }
+
+    return () => {
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+      }
+    };
+  }, [file.id, token, category, file.mime_type]);
 
   // Gallery Navigation (Find current index in file list)
   const currentIndex = files.findIndex(f => f.id === file.id);
@@ -148,15 +181,22 @@ export default function FilePreviewModal({
         {/* Content Viewer */}
         <div className="flex-1 overflow-auto bg-slate-950/60 flex items-center justify-center p-3 sm:p-5 min-h-[380px]">
           {category === 'image' && (
-            <img
-              src={streamUrl}
-              alt={file.name}
-              className="max-h-[72vh] max-w-full object-contain rounded-xl shadow-lg animate-in fade-in zoom-in-95 duration-200"
-            />
+            loadingBlob ? (
+              <div className="flex flex-col items-center justify-center p-12 text-slate-400 space-y-3">
+                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs">Memuat gambar...</span>
+              </div>
+            ) : (
+              <img
+                src={blobUrl || streamUrl}
+                alt={file.name}
+                className="max-h-[72vh] max-w-full object-contain rounded-xl shadow-lg animate-in fade-in zoom-in-95 duration-200"
+              />
+            )
           )}
 
           {category === 'video' && (
-            <VideoPlayer src={streamUrl} fileName={file.name} />
+            <VideoPlayer src={streamUrl} fileName={file.name} onDownload={() => onDownload(file)} />
           )}
 
           {category === 'audio' && (
@@ -170,11 +210,32 @@ export default function FilePreviewModal({
           )}
 
           {category === 'pdf' && (
-            <iframe
-              src={streamUrl}
-              title={file.name}
-              className="w-full h-[72vh] rounded-xl border border-slate-800 bg-white"
-            />
+            loadingBlob ? (
+              <div className="flex flex-col items-center justify-center p-12 text-slate-400 space-y-3">
+                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-xs">Memuat dokumen PDF...</span>
+              </div>
+            ) : blobError ? (
+              <div className="text-center p-8 space-y-4">
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                  <FileText className="w-8 h-8" />
+                </div>
+                <p className="text-rose-400 text-xs font-semibold">{blobError}</p>
+                <button
+                  onClick={() => onDownload(file)}
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl inline-flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-500/25"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Unduh Dokumen PDF Ini</span>
+                </button>
+              </div>
+            ) : (
+              <iframe
+                src={blobUrl || streamUrl}
+                title={file.name}
+                className="w-full h-[72vh] rounded-xl border border-slate-800 bg-white"
+              />
+            )
           )}
 
           {(category === 'code' || file.mime_type.includes('text')) && (

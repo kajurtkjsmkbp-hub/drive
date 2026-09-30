@@ -355,15 +355,38 @@ export default function App() {
     fetchFiles();
   };
 
-  // Download Single File
-  const handleDownloadFile = (file) => {
-    const downloadUrl = `/api/files/download/${file.id}?token=${token}`;
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.setAttribute('download', file.name);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Download Single File (using Authorization header & Blob for 100% reliable auth)
+  const handleDownloadFile = async (file) => {
+    try {
+      addToast({
+        type: 'info',
+        title: 'Mengunduh Berkas',
+        message: `Memulai unduhan "${file.name}"...`
+      });
+
+      const res = await axios.get(`/api/files/download/${file.id}`, {
+        ...authHeaders,
+        responseType: 'blob'
+      });
+
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', file.name);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      console.warn('Axios blob download failed, falling back to direct URL:', err);
+      const downloadUrl = `/api/files/download/${file.id}?token=${encodeURIComponent(token || '')}`;
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.setAttribute('download', file.name);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Download Batch (ZIP)
