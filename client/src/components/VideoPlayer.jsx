@@ -1,10 +1,9 @@
-import React, { useRef, useState, useEffect } from 'react';
 import { 
   Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Volume1, 
-  Maximize, Minimize, Gauge, Check
+  Maximize, Minimize, Gauge, Check, Download, AlertTriangle, Film
 } from 'lucide-react';
 
-export default function VideoPlayer({ src, fileName }) {
+export default function VideoPlayer({ src, fileName, onDownload }) {
   const videoRef = useRef(null);
   const containerRef = useRef(null);
 
@@ -18,7 +17,11 @@ export default function VideoPlayer({ src, fileName }) {
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [speedNotice, setSpeedNotice] = useState('');
   const [controlsVisible, setControlsVisible] = useState(true);
+  const [hasError, setHasError] = useState(false);
   const hideControlsTimer = useRef(null);
+
+  const ext = (fileName?.split('.').pop() || '').toLowerCase();
+  const isLikelyUnsupported = ['wmv', 'avi', 'flv', 'rmvb', 'vob'].includes(ext);
 
   const speedOptions = [
     { label: '0.5x (Lambat)', value: 0.5 },
@@ -177,9 +180,42 @@ export default function VideoPlayer({ src, fileName }) {
         onClick={togglePlay}
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
+        onError={() => setHasError(true)}
         onEnded={() => setIsPlaying(false)}
         className="w-full max-h-[75vh] object-contain cursor-pointer"
       />
+
+      {/* Unsupported Format or Playback Error Notice */}
+      {(hasError || isLikelyUnsupported) && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 bg-slate-950/95 text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <Film className="w-8 h-8" />
+          </div>
+          <div className="space-y-1.5 max-w-md">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <AlertTriangle className="w-3.5 h-3.5" />
+              <span>Format .{ext.toUpperCase()} Memerlukan Pemutar Eksternal</span>
+            </div>
+            <h4 className="text-sm font-bold text-white pt-1">{fileName}</h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Browser web modern (Chrome, Edge, Firefox) secara bawaan tidak dapat memutar video berformat <strong>.{ext.toUpperCase()}</strong> langsung di browser. Silakan unduh berkas ini untuk diputar menggunakan VLC atau Windows Media Player di komputer Anda.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <a
+              href={src.replace('&view=inline', '')}
+              download={fileName}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Unduh Video Ini</span>
+            </a>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            💡 Tip: Gunakan tombol panah kiri / kanan (◀ ▶) untuk melihat berkas lain di folder ini.
+          </p>
+        </div>
+      )}
 
       {/* Speed Notice Banner Badge */}
       {speedNotice && (
@@ -189,7 +225,7 @@ export default function VideoPlayer({ src, fileName }) {
       )}
 
       {/* Big Play/Pause Center Button Overlay when Paused */}
-      {!isPlaying && (
+      {!isPlaying && !hasError && !isLikelyUnsupported && (
         <button
           onClick={togglePlay}
           className="absolute inset-0 m-auto w-18 h-18 rounded-3xl bg-blue-600/90 hover:bg-blue-500 text-white flex items-center justify-center shadow-2xl shadow-blue-500/30 transition-all transform hover:scale-110 cursor-pointer z-20 backdrop-blur-sm"
