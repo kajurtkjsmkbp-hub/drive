@@ -83,12 +83,12 @@ apt update && apt upgrade -y
 # Pasang dependensi esensial
 apt install -y curl git build-essential sqlite3
 
-# Pasang Node.js LTS (Versi 20.x)
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+# Pasang Node.js LTS (Versi 22.x - Diperlukan untuk modul native SQLite)
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
 
 # Verifikasi versi terpasang
-node -v   # Harus v20.x.x ke atas
+node -v   # Harus v22.5.0 ke atas
 npm -v
 git --version
 ```
