@@ -637,79 +637,82 @@ export default function AdminDashboard({ token, onClose }) {
 
       {/* USER EDIT / CREATE MODAL */}
       {showUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 select-none">
           <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl">
             <h3 className="text-base font-bold text-white mb-4">
-              {editingUser ? `Edit User: ${editingUser.username}` : 'Create New User Account'}
+              {editingUser ? `Ubah Pengguna: ${editingUser.username}` : 'Tambah Akun Pengguna Baru'}
             </h3>
 
             <form onSubmit={handleSaveUser} className="space-y-3.5">
               {!editingUser && (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">Username</label>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Nama Pengguna (Username)</label>
                     <input
                       type="text"
                       required
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                      placeholder="Masukkan nama pengguna"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">Email</label>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Alamat Email</label>
                     <input
                       type="email"
                       required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                      placeholder="user@perusahaan.com"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                     />
                   </div>
                 </>
               )}
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  {editingUser ? 'Reset Password (Leave blank to keep current)' : 'Password'}
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  {editingUser ? 'Setel Ulang Kata Sandi (Kosongkan jika tidak diubah)' : 'Kata Sandi (Password)'}
                 </label>
                 <input
                   type="password"
                   required={!editingUser}
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                  placeholder="••••••••"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Access Role</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Tingkatan Hak Akses</label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 >
-                  <option value="user">Standard User (Personal Drive)</option>
-                  <option value="admin">Administrator (Full System & User Control)</option>
-                  <option value="guest">Guest (Read Only)</option>
+                  <option value="user">Pengguna Biasa (Drive Pribadi)</option>
+                  <option value="admin">Administrator (Kendali Penuh Sistem)</option>
+                  <option value="guest">Tamu (Hanya Baca)</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Storage Quota (GB)</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Alokasi Kuota Penyimpanan (GB)</label>
                 <input
                   type="number"
                   min="1"
                   required
                   value={formData.quota_gb}
                   onChange={(e) => setFormData({ ...formData, quota_gb: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               {editingUser && (
                 <div className="flex items-center justify-between pt-2">
-                  <span className="text-xs text-slate-300">Account Active</span>
+                  <span className="text-xs text-slate-300">Status Akun Aktif</span>
                   <input
                     type="checkbox"
                     checked={formData.is_active === 1}
@@ -723,15 +726,15 @@ export default function AdminDashboard({ token, onClose }) {
                 <button
                   type="button"
                   onClick={() => setShowUserModal(false)}
-                  className="px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer"
                 >
-                  Cancel
+                  Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl shadow-md"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
                 >
-                  Save User
+                  Simpan Akun
                 </button>
               </div>
             </form>

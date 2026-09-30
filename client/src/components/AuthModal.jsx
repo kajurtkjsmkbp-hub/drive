@@ -24,17 +24,17 @@ export default function AuthModal({ onLoginSuccess }) {
       localStorage.setItem('aether_user', JSON.stringify(res.data.user));
       onLoginSuccess(res.data.user, res.data.token);
     } catch (err) {
-      setError(err.response?.data?.error || 'Authentication failed. Please verify your credentials.');
+      setError(err.response?.data?.error || 'Proses autentikasi gagal. Periksa kembali nama pengguna dan kata sandi Anda.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 select-none">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
-        {/* Header Banner */}
+        {/* Banner Header */}
         <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-500 p-6 text-white text-center relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/15 to-transparent"></div>
           <div className="relative z-10 flex flex-col items-center">
@@ -42,32 +42,32 @@ export default function AuthModal({ onLoginSuccess }) {
               <HardDrive className="w-8 h-8 text-cyan-300" />
             </div>
             <h1 className="text-2xl font-bold tracking-tight">AetherDrive Cloud</h1>
-            <p className="text-xs text-blue-100 font-medium mt-1">High-Performance Proxmox Storage & TrueNAS Hub</p>
+            <p className="text-xs text-blue-100 font-medium mt-1">Platform Penyimpanan Cloud Proxmox & TrueNAS</p>
           </div>
         </div>
 
-        {/* Form Body */}
+        {/* Badan Formulir */}
         <div className="p-6">
           <div className="flex border-b border-slate-800 mb-6">
             <button
               onClick={() => { setIsRegister(false); setError(''); }}
-              className={`flex-1 pb-3 text-sm font-semibold text-center transition-all ${
+              className={`flex-1 pb-3 text-xs font-bold text-center transition-colors cursor-pointer ${
                 !isRegister
                   ? 'border-b-2 border-blue-500 text-blue-400'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Sign In
+              Masuk Akun
             </button>
             <button
               onClick={() => { setIsRegister(true); setError(''); }}
-              className={`flex-1 pb-3 text-sm font-semibold text-center transition-all ${
+              className={`flex-1 pb-3 text-xs font-bold text-center transition-colors cursor-pointer ${
                 isRegister
                   ? 'border-b-2 border-blue-500 text-blue-400'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Create Account
+              Daftar Akun Baru
             </button>
           </div>
 
@@ -80,48 +80,48 @@ export default function AuthModal({ onLoginSuccess }) {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Username</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Nama Pengguna (Username)</label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="text"
                   required
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter username"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                  placeholder="Masukkan nama pengguna"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
             </div>
 
             {isRegister && (
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5">Email Address</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Alamat Email</label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="user@example.com"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                    placeholder="nama@perusahaan.com"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">Password</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Kata Sandi (Password)</label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
             </div>
@@ -129,23 +129,23 @@ export default function AuthModal({ onLoginSuccess }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+              className="w-full mt-2 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
             >
               {loading ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
               ) : (
                 <>
-                  <span>{isRegister ? 'Register & Initialize Storage' : 'Sign In to Drive'}</span>
+                  <span>{isRegister ? 'Daftar & Inisialisasi Penyimpanan' : 'Masuk ke Drive'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Quick Demo Info */}
+          {/* Info Kredensial Bawaan */}
           <div className="mt-6 pt-4 border-t border-slate-800 text-center">
-            <p className="text-xs text-slate-500">
-              Default Administrator: <span className="text-blue-400 font-mono">admin</span> / <span className="text-blue-400 font-mono">admin123</span>
+            <p className="text-[11px] text-slate-400">
+              Administrator Bawaan: <span className="text-blue-400 font-mono font-bold">admin</span> / <span className="text-blue-400 font-mono font-bold">admin123</span>
             </p>
           </div>
         </div>
