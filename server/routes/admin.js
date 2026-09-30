@@ -294,30 +294,33 @@ router.put('/settings', (req, res) => {
 // GET /api/admin/usb - Detect connected USB flash drives and external hard disks
 router.get('/usb', async (req, res) => {
   try {
-    const [devices, fsSizes] = await Promise.all([
-      si.blockDevices(),
-      si.fsSize()
-    ]);
-
     const isWindows = process.platform === 'win32';
     const isLinux = process.platform === 'linux';
 
     let usbDrives = [];
 
-    // Filter candidate devices
-    devices.forEach(d => {
-      const isRemovable = d.removable || d.physical === 'Removable' || d.protocol === 'USB';
-      const isPotentialLinuxDrive = isLinux && d.name && d.name.startsWith('sd') && d.name !== 'sda';
-      const isWindowsExternal = isWindows && d.name && !['C:', 'D:', 'Z:'].includes(d.name.toUpperCase());
-
-      if (isRemovable || isPotentialLinuxDrive || isWindowsExternal) {
-        usbDrives.push(d);
-      }
-    });
-
-    // Also check standard Linux/Proxmox mount locations (/media and /mnt)
     if (isLinux) {
+      // 1. Read /proc/mounts to find true external mounts (/media and /mnt)
+      let mountMap = {};
+      if (fs.existsSync('/proc/mounts')) {
+        try {
+          const lines = fs.readFileSync('/proc/mounts', 'utf-8').split('\n');
+          lines.forEach(l => {
+            const parts = l.trim().split(/\s+/);
+            if (parts.length >= 3) {
+              const [dev, mnt, fstype] = parts;
+              if (mnt.startsWith('/media') || mnt.startsWith('/mnt')) {
+                mountMap[mnt] = { dev, fstype };
+              }
+            }
+          });
+        } catch {}
+      }
+
+      // Check candidate directories (/media and /mnt)
       const scanDirs = ['/media', '/mnt'];
+      const scannedMounts = new Set();
+
       scanDirs.forEach(baseDir => {
         if (fs.existsSync(baseDir)) {
           try {
@@ -325,79 +328,187 @@ router.get('/usb', async (req, res) => {
             list.forEach(entry => {
               if (entry.isDirectory()) {
                 const fullMount = path.join(baseDir, entry.name);
-                if (!usbDrives.some(u => u.mount === fullMount)) {
-                  const statMatch = fsSizes.find(f => f.mount === fullMount);
-                  usbDrives.push({
-                    name: entry.name,
-                    identifier: fullMount,
-                    mount: fullMount,
-                    label: entry.name,
-                    fsType: statMatch?.type || 'NTFS/FAT',
-                    size: statMatch?.size || 0,
-                    removable: true
-                  });
-                }
+                scannedMounts.add(fullMount);
               }
             });
           } catch {}
         }
       });
+
+      // Also ensure /media/usb is checked even if not in readdir
+      if (fs.existsSync('/media/usb')) {
+        scannedMounts.add('/media/usb');
+      }
+
+      // Root stat to avoid showing empty rootfs directories
+      let rootStat = null;
+      try {
+        rootStat = fs.statfsSync('/');
+      } catch {}
+
+      for (const mntPath of scannedMounts) {
+        if (!fs.existsSync(mntPath)) continue;
+
+        let entries = [];
+        try {
+          entries = fs.readdirSync(mntPath, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+
+        const validEntries = entries.filter(e => 
+          !e.name.startsWith('.') && 
+          e.name !== 'System Volume Information' && 
+          e.name !== '$RECYCLE.BIN' && 
+          e.name !== 'lost+found'
+        );
+
+        let mntStat = null;
+        try {
+          mntStat = fs.statfsSync(mntPath);
+        } catch {}
+
+        const isMountedInProc = !!mountMap[mntPath];
+        const isDistinctFromRoot = mntStat && rootStat && (mntStat.blocks !== rootStat.blocks || mntStat.bsize !== rootStat.bsize);
+
+        // A directory is an actual external drive IF:
+        // 1) It has files inside, OR
+        // 2) It is explicitly mounted in /proc/mounts, OR
+        // 3) Its statfs is distinct from root filesystem
+        // If it's an empty folder with 0 files and same blocks as root, it means NO USB is currently plugged in!
+        if (validEntries.length === 0 && !isMountedInProc && !isDistinctFromRoot) {
+          continue; // Skip empty unmounted dummy folder
+        }
+
+        const devInfo = mountMap[mntPath] || {};
+        let rawFsType = (devInfo.fstype || '').toLowerCase();
+        let format = 'FAT32/NTFS';
+        if (rawFsType.includes('fuse') || rawFsType.includes('ntfs')) format = 'NTFS';
+        else if (rawFsType.includes('vfat') || rawFsType.includes('fat')) format = 'FAT32';
+        else if (rawFsType.includes('exfat')) format = 'exFAT';
+        else if (rawFsType.includes('ext')) format = 'EXT4';
+
+        // Check for USB volume label
+        let volumeLabel = '';
+        if (devInfo.dev) {
+          try {
+            const { execSync } = require('child_process');
+            volumeLabel = execSync(`lsblk -no LABEL ${devInfo.dev} 2>/dev/null || blkid -s LABEL -o value ${devInfo.dev} 2>/dev/null`, { timeout: 1000 }).toString().trim();
+          } catch {}
+        }
+
+        const baseName = path.basename(mntPath);
+        let friendlyLabel = 'Flashdisk USB Eksternal';
+        if (volumeLabel) {
+          friendlyLabel = `${volumeLabel} (Flashdisk USB)`;
+        } else if (baseName && baseName !== 'usb') {
+          friendlyLabel = `Flashdisk ${baseName}`;
+        }
+
+        const totalBytes = mntStat ? Number(mntStat.blocks) * Number(mntStat.bsize) : 0;
+        const freeBytes = mntStat ? Number(mntStat.bfree) * Number(mntStat.bsize) : 0;
+        const usedBytes = Math.max(0, totalBytes - freeBytes);
+
+        // Filter out zero-byte dummy mounts
+        if (totalBytes === 0 && validEntries.length === 0) {
+          continue;
+        }
+
+        usbDrives.push({
+          name: baseName,
+          identifier: devInfo.dev || mntPath,
+          mount: mntPath,
+          label: friendlyLabel,
+          format: format,
+          isNtfs: format === 'NTFS',
+          size: totalBytes,
+          used: usedBytes,
+          available: freeBytes,
+          model: `Port USB Server Proxmox (${mntPath})`,
+          entries: validEntries
+        });
+      }
+    } else if (isWindows) {
+      // Windows external drives (E:, F:, G:, etc.)
+      const [devices, fsSizes] = await Promise.all([
+        si.blockDevices(),
+        si.fsSize()
+      ]);
+
+      devices.forEach(d => {
+        const isRemovable = d.removable || d.physical === 'Removable' || d.protocol === 'USB';
+        const isWindowsExternal = d.name && !['C:', 'D:', 'Z:'].includes(d.name.toUpperCase());
+
+        if (isRemovable || isWindowsExternal) {
+          let mountPath = d.mount || (d.name && d.name.length === 2 && d.name.endsWith(':') ? `${d.name}\\` : null);
+          if (mountPath && fs.existsSync(mountPath)) {
+            const fsMatch = fsSizes.find(f => f.mount === mountPath || f.fs === d.name);
+            const rawLabel = d.label || d.name || 'Flashdisk USB';
+            const cleanLabel = rawLabel.replace(/[^\w\s-]/g, '').trim() || 'Flashdisk Eksternal';
+            
+            let entries = [];
+            try {
+              entries = fs.readdirSync(mountPath, { withFileTypes: true });
+            } catch {}
+            const validEntries = entries.filter(e => 
+              !e.name.startsWith('.') && 
+              e.name !== 'System Volume Information' && 
+              e.name !== '$RECYCLE.BIN'
+            );
+
+            const totalBytes = d.size ? Number(d.size) : (fsMatch ? fsMatch.size : 0);
+            if (totalBytes === 0 && validEntries.length === 0) return;
+
+            usbDrives.push({
+              name: d.name,
+              identifier: d.identifier || d.name,
+              mount: mountPath,
+              label: cleanLabel,
+              format: (d.fsType || fsMatch?.type || 'FAT32/NTFS').toUpperCase(),
+              isNtfs: (d.fsType || fsMatch?.type || '').toUpperCase().includes('NTFS'),
+              size: totalBytes,
+              used: fsMatch ? fsMatch.used : 0,
+              available: fsMatch ? fsMatch.available : totalBytes,
+              model: d.model || 'USB Flash Drive / External HDD',
+              entries: validEntries
+            });
+          }
+        }
+      });
     }
 
     const processed = usbDrives.map(d => {
-      const fsMatch = fsSizes.find(f => f.mount === d.mount || (d.name && f.fs && f.fs.includes(d.name)));
-      const format = (d.fsType || fsMatch?.type || 'unknown').toUpperCase();
-      const isNtfs = format.includes('NTFS');
-      let mountPath = d.mount || fsMatch?.mount || null;
-
-      if (isWindows && !mountPath && d.name && d.name.length === 2 && d.name.endsWith(':')) {
-        mountPath = `${d.name}\\`;
-      }
-
-      const rawLabel = d.label || d.name || 'Flashdisk USB';
-      const cleanLabel = rawLabel.replace(/[^\w\s-]/g, '').trim() || 'Flashdisk Eksternal';
-      const folderName = `[USB] ${cleanLabel}`;
+      const folderName = `[USB] ${d.label}`;
       const virtualPath = `/${folderName}`;
 
-      // Check if already attached to user's Drive Saya
       const attachedRecord = db.prepare(`
         SELECT id, name, path FROM files 
         WHERE user_id = ? AND is_dir = 1 AND path = ? AND is_trashed = 0
       `).get(req.user.id, virtualPath);
 
-      // Peek files inside mount if accessible
-      let previewFiles = [];
-      let totalFilesFound = 0;
-      if (mountPath && fs.existsSync(mountPath)) {
-        try {
-          const entries = fs.readdirSync(mountPath, { withFileTypes: true });
-          const valid = entries.filter(e => !e.name.startsWith('.') && e.name !== 'System Volume Information' && e.name !== '$RECYCLE.BIN');
-          totalFilesFound = valid.length;
-          previewFiles = valid.slice(0, 8).map(e => ({
-            name: e.name,
-            is_dir: e.isDirectory(),
-            mime_type: e.isDirectory() ? 'directory' : (mime.lookup(e.name) || 'application/octet-stream')
-          }));
-        } catch {}
-      }
+      const previewFiles = (d.entries || []).slice(0, 8).map(e => ({
+        name: e.name,
+        is_dir: e.isDirectory(),
+        mime_type: e.isDirectory() ? 'directory' : (mime.lookup(e.name) || 'application/octet-stream')
+      }));
 
       return {
         name: d.name,
-        identifier: d.identifier || d.name,
-        label: cleanLabel,
-        format: format,
-        isNtfs: isNtfs,
-        size: d.size ? Number(d.size) : (fsMatch ? fsMatch.size : 0),
-        used: fsMatch ? fsMatch.used : 0,
-        available: fsMatch ? fsMatch.available : (d.size ? Number(d.size) : 0),
-        mount: mountPath,
-        isMounted: !!mountPath && fs.existsSync(mountPath),
+        identifier: d.identifier,
+        label: d.label,
+        format: d.format,
+        isNtfs: d.isNtfs,
+        size: d.size,
+        used: d.used,
+        available: d.available,
+        mount: d.mount,
+        isMounted: true,
         isAttached: !!attachedRecord,
         attachedFolder: folderName,
         attachedPath: virtualPath,
         removable: true,
-        model: d.model || 'USB Flash Drive / External HDD',
-        fileCount: totalFilesFound,
+        model: d.model,
+        fileCount: (d.entries || []).length,
         previewFiles: previewFiles
       };
     });
