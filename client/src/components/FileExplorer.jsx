@@ -563,7 +563,7 @@ export default function FileExplorer({
               {displayedFiles.map((file) => {
                 const isSelected = selectedIds.includes(file.id);
                 const isImage = !file.is_dir && getFileCategory(file.name, file.mime_type) === 'image';
-                const thumbnailUrl = `/api/files/download/${file.id}?token=${token}&view=inline`;
+                const thumbnailUrl = `/api/files/download/${file.id}?token=${encodeURIComponent(token || '')}&view=inline`;
 
                 return (
                   <div

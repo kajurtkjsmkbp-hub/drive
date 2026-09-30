@@ -22,7 +22,7 @@ export default function FilePreviewModal({
   if (!file) return null;
 
   const category = getFileCategory(file.name, file.mime_type);
-  const streamUrl = `/api/files/download/${file.id}?token=${token}&view=inline`;
+  const streamUrl = `/api/files/download/${file.id}?token=${encodeURIComponent(token || '')}&view=inline`;
 
   // Gallery Navigation (Find current index in file list)
   const currentIndex = files.findIndex(f => f.id === file.id);
