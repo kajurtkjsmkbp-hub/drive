@@ -9,6 +9,37 @@ const { authenticateToken, logActivity } = require('../middleware/auth');
 
 const router = express.Router();
 
+const USERS_ROOT = path.join(__dirname, '..', '..', 'data', 'storage', 'users');
+
+function resolveDiskPath(file, username) {
+  if (file && file.disk_path && fs.existsSync(file.disk_path)) {
+    return file.disk_path;
+  }
+  if (!file) return null;
+  const cleanPath = (file.path || '').replace(/^\/+/, '');
+  const candidate = path.join(USERS_ROOT, username || '', cleanPath);
+  if (fs.existsSync(candidate)) {
+    try {
+      db.prepare('UPDATE files SET disk_path = ? WHERE id = ?').run(candidate, file.id);
+    } catch {}
+    return candidate;
+  }
+  return file.disk_path;
+}
+
+function createZipArchiver(options = { zlib: { level: 6 } }) {
+  if (typeof archiver === 'function') {
+    return archiver('zip', options);
+  }
+  if (archiver.ZipArchive) {
+    return new archiver.ZipArchive(options);
+  }
+  if (archiver.Archiver) {
+    return new archiver.Archiver('zip', options);
+  }
+  throw new Error('Unsupported archiver format');
+}
+
 // POST /api/shares - Create share link
 router.post('/', authenticateToken, (req, res) => {
   const { file_id, password, expires_in_days, allow_download = 1 } = req.body;
@@ -93,10 +124,10 @@ router.delete('/:id', authenticateToken, (req, res) => {
 // GET /public/share/info/:token - Check share info & verify password
 router.get('/info/:token', (req, res) => {
   const { token } = req.params;
-  const { password } = req.query;
+  const { password, subpath = '' } = req.query;
 
   const share = db.prepare(`
-    SELECT s.*, f.name as file_name, f.size, f.mime_type, f.is_dir, u.username as owner_name
+    SELECT s.*, f.name as file_name, f.size, f.mime_type, f.is_dir, f.path as file_path, u.username as owner_name
     FROM shares s
     JOIN files f ON s.file_id = f.id
     JOIN users u ON s.user_id = u.id
@@ -128,9 +159,39 @@ router.get('/info/:token', (req, res) => {
     db.prepare('UPDATE shares SET view_count = view_count + 1 WHERE id = ?').run(share.id);
   }
 
+  let items = [];
+  let totalFolderSize = share.size;
+  let fileCount = 0;
+
+  if (share.is_dir === 1) {
+    // Calculate total folder size and count
+    const stats = db.prepare(`
+      SELECT COALESCE(SUM(size), 0) as total_size, COUNT(*) as count
+      FROM files
+      WHERE user_id = ? AND is_trashed = 0 AND (parent_path = ? OR parent_path LIKE ?)
+    `).get(share.user_id, share.file_path, `${share.file_path}/%`);
+
+    totalFolderSize = stats ? stats.total_size : 0;
+    fileCount = stats ? stats.count : 0;
+
+    if (passwordValid) {
+      // Determine folder path to list (support subpath navigation)
+      const cleanSub = subpath ? subpath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
+      const currentFolderVirtualPath = cleanSub ? `${share.file_path}/${cleanSub}` : share.file_path;
+
+      items = db.prepare(`
+        SELECT id, name, size, mime_type, is_dir, created_at, updated_at
+        FROM files
+        WHERE user_id = ? AND parent_path = ? AND is_trashed = 0
+        ORDER BY is_dir DESC, name ASC
+      `).all(share.user_id, currentFolderVirtualPath);
+    }
+  }
+
   res.json({
     file_name: share.file_name,
-    size: share.size,
+    size: share.is_dir ? totalFolderSize : share.size,
+    file_count: fileCount,
     mime_type: share.mime_type,
     is_dir: share.is_dir,
     owner_name: share.owner_name,
@@ -138,19 +199,22 @@ router.get('/info/:token', (req, res) => {
     expires_at: share.expires_at,
     requires_password: requiresPassword,
     password_valid: passwordValid,
-    allow_download: share.allow_download === 1
+    allow_download: share.allow_download === 1,
+    subpath: subpath || '',
+    items: items
   });
 });
 
-// GET /public/share/:token/download - Download shared file
+// GET /public/share/:token/download - Download shared file (or specific file inside folder)
 router.get('/:token/download', (req, res) => {
   const { token } = req.params;
-  const { password } = req.query;
+  const { password, file_id } = req.query;
 
   const share = db.prepare(`
-    SELECT s.*, f.name as file_name, f.disk_path, f.size, f.mime_type, f.is_dir
+    SELECT s.*, f.name as file_name, f.disk_path, f.size, f.mime_type, f.is_dir, f.path as file_path, u.username as owner_name
     FROM shares s
     JOIN files f ON s.file_id = f.id
+    JOIN users u ON s.user_id = u.id
     WHERE s.share_token = ?
   `).get(token);
 
@@ -172,12 +236,47 @@ router.get('/:token/download', (req, res) => {
     }
   }
 
+  share.disk_path = resolveDiskPath(share, share.owner_name);
+
+  // If visitor is downloading a single specific file/folder from inside the shared directory
+  if (file_id) {
+    if (!share.is_dir) {
+      return res.status(400).json({ error: 'Single file share does not support file_id parameter.' });
+    }
+
+    const targetFile = db.prepare(`
+      SELECT * FROM files
+      WHERE id = ? AND user_id = ? AND is_trashed = 0 AND (parent_path = ? OR parent_path LIKE ?)
+    `).get(file_id, share.user_id, share.file_path, `${share.file_path}/%`);
+
+    if (!targetFile) {
+      return res.status(404).json({ error: 'Requested file not found in shared folder.' });
+    }
+
+    targetFile.disk_path = resolveDiskPath(targetFile, share.owner_name);
+
+    if (!fs.existsSync(targetFile.disk_path)) {
+      return res.status(404).json({ error: 'File missing on storage server.' });
+    }
+
+    if (targetFile.is_dir) {
+      const archive = createZipArchiver({ zlib: { level: 6 } });
+      res.attachment(`${targetFile.name}.zip`);
+      archive.pipe(res);
+      archive.directory(targetFile.disk_path, targetFile.name);
+      return archive.finalize();
+    } else {
+      return res.download(targetFile.disk_path, targetFile.name);
+    }
+  }
+
+  // Otherwise, download the root shared item (single file or full folder ZIP)
   if (!fs.existsSync(share.disk_path)) {
     return res.status(404).json({ error: 'File missing on storage server.' });
   }
 
   if (share.is_dir) {
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = createZipArchiver({ zlib: { level: 6 } });
     res.attachment(`${share.file_name}.zip`);
     archive.pipe(res);
     archive.directory(share.disk_path, share.file_name);
@@ -190,17 +289,18 @@ router.get('/:token/download', (req, res) => {
 // GET /public/share/:token/stream - Stream/Preview shared media/file
 router.get('/:token/stream', (req, res) => {
   const { token } = req.params;
-  const { password } = req.query;
+  const { password, file_id } = req.query;
 
   const share = db.prepare(`
-    SELECT s.*, f.name as file_name, f.disk_path, f.size, f.mime_type, f.is_dir
+    SELECT s.*, f.name as file_name, f.disk_path, f.size, f.mime_type, f.is_dir, f.path as file_path, u.username as owner_name
     FROM shares s
     JOIN files f ON s.file_id = f.id
+    JOIN users u ON s.user_id = u.id
     WHERE s.share_token = ?
   `).get(token);
 
-  if (!share || share.is_dir) {
-    return res.status(404).json({ error: 'Streamable file not found.' });
+  if (!share) {
+    return res.status(404).json({ error: 'Link not found.' });
   }
 
   if (share.expires_at && new Date(share.expires_at) < new Date()) {
@@ -213,11 +313,33 @@ router.get('/:token/stream', (req, res) => {
     }
   }
 
-  if (!fs.existsSync(share.disk_path)) {
+  share.disk_path = resolveDiskPath(share, share.owner_name);
+  let targetDiskPath = share.disk_path;
+  let targetFileName = share.file_name;
+  let targetMimeType = share.mime_type;
+
+  if (file_id) {
+    const targetFile = db.prepare(`
+      SELECT * FROM files
+      WHERE id = ? AND user_id = ? AND is_trashed = 0 AND (parent_path = ? OR parent_path LIKE ?)
+    `).get(file_id, share.user_id, share.file_path, `${share.file_path}/%`);
+
+    if (!targetFile || targetFile.is_dir) {
+      return res.status(404).json({ error: 'Streamable file not found in shared folder.' });
+    }
+    targetFile.disk_path = resolveDiskPath(targetFile, share.owner_name);
+    targetDiskPath = targetFile.disk_path;
+    targetFileName = targetFile.name;
+    targetMimeType = targetFile.mime_type;
+  } else if (share.is_dir) {
+    return res.status(400).json({ error: 'Cannot stream a folder directly. Specify file_id.' });
+  }
+
+  if (!fs.existsSync(targetDiskPath)) {
     return res.status(404).json({ error: 'File missing on storage server.' });
   }
 
-  const stat = fs.statSync(share.disk_path);
+  const stat = fs.statSync(targetDiskPath);
   const fileSize = stat.size;
   const range = req.headers.range;
 
@@ -226,22 +348,22 @@ router.get('/:token/stream', (req, res) => {
     const start = parseInt(parts[0], 10);
     const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
     const chunksize = (end - start) + 1;
-    const stream = fs.createReadStream(share.disk_path, { start, end });
+    const stream = fs.createReadStream(targetDiskPath, { start, end });
 
     res.writeHead(206, {
       'Content-Range': `bytes ${start}-${end}/${fileSize}`,
       'Accept-Ranges': 'bytes',
       'Content-Length': chunksize,
-      'Content-Type': share.mime_type || 'application/octet-stream',
+      'Content-Type': targetMimeType || 'application/octet-stream',
     });
     stream.pipe(res);
   } else {
     res.writeHead(200, {
       'Content-Length': fileSize,
-      'Content-Type': share.mime_type || 'application/octet-stream',
-      'Content-Disposition': `inline; filename="${encodeURIComponent(share.file_name)}"`
+      'Content-Type': targetMimeType || 'application/octet-stream',
+      'Content-Disposition': `inline; filename="${encodeURIComponent(targetFileName)}"`
     });
-    fs.createReadStream(share.disk_path).pipe(res);
+    fs.createReadStream(targetDiskPath).pipe(res);
   }
 });
 

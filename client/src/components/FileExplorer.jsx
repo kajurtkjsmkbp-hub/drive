@@ -4,7 +4,7 @@ import {
   MoreVertical, Download, Share2, Star, Trash2, Edit3, 
   RotateCcw, FolderPlus, Upload, ChevronRight, Eye, CheckSquare, 
   Square, AlertTriangle, ArrowUpDown, Clock, Copy, Check, Lock, 
-  Globe, HardDrive, FolderInput, RefreshCw, Layers
+  Globe, HardDrive, FolderInput, RefreshCw, Layers, Search
 } from 'lucide-react';
 import { formatBytes, formatDate, getFileCategory } from '../utils/format';
 
@@ -32,7 +32,9 @@ export default function FileExplorer({
   onMoveFiles,
   onRescanDisk,
   activeFilter = '',
-  setActiveFilter
+  setActiveFilter,
+  searchQuery = '',
+  setSearchQuery
 }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [dragOver, setDragOver] = useState(false);
@@ -43,6 +45,14 @@ export default function FileExplorer({
   // Helper render ikon kategori berkas
   const renderFileIcon = (file) => {
     if (file.is_dir) {
+      if (file.name && file.name.startsWith('[USB]')) {
+        return (
+          <div className="relative flex items-center justify-center">
+            <HardDrive className="w-10 h-10 text-cyan-400" />
+            <span className="absolute -bottom-1 -right-1 px-1 py-0.2 bg-emerald-500 text-[8px] font-black text-slate-950 rounded shadow">USB</span>
+          </div>
+        );
+      }
       return <Folder className="w-10 h-10 text-amber-400 fill-amber-400/20" />;
     }
     const cat = getFileCategory(file.name, file.mime_type);
@@ -463,36 +473,61 @@ export default function FileExplorer({
                   <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
                   <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-blue-600/20 to-indigo-600/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto group-hover:scale-105 transition-all shadow-xl shadow-blue-500/5">
-                    <Upload className="w-10 h-10" />
+                    {searchQuery ? (
+                      <Search className="w-10 h-10 text-amber-400" />
+                    ) : (
+                      <Upload className="w-10 h-10" />
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
                     <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
-                      {activeFilter ? 'Tidak Ada Berkas yang Cocok dengan Filter' : 'Folder Ini Masih Kosong'}
+                      {searchQuery
+                        ? 'Tidak Ditemukan Berkas yang Cocok'
+                        : activeFilter
+                        ? 'Tidak Ada Berkas yang Cocok dengan Filter'
+                        : 'Folder Ini Masih Kosong'}
                     </h3>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                      {activeFilter 
-                        ? 'Tidak ditemukan berkas bertipe ini di dalam folder. Coba pilih filter "Semua".'
-                        : 'Tarik dan lepaskan berkas dari komputer Anda ke sini, atau pilih tindakan cepat di bawah:'}
+                      {searchQuery ? (
+                        <>
+                          Tidak ada berkas atau folder yang cocok dengan pencarian <span className="text-cyan-400 font-semibold">"{searchQuery}"</span>.
+                        </>
+                      ) : activeFilter ? (
+                        'Tidak ditemukan berkas bertipe ini di dalam folder. Coba pilih filter "Semua".'
+                      ) : (
+                        'Tarik dan lepaskan berkas dari komputer Anda ke sini, atau pilih tindakan cepat di bawah:'
+                      )}
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                    <button
-                      onClick={() => fileInputExplorerRef.current?.click()}
-                      className="py-2.5 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
-                    >
-                      <Upload className="w-4 h-4" />
-                      <span>Unggah Berkas Sekarang</span>
-                    </button>
-                    <button
-                      onClick={onCreateFolder}
-                      className="py-2.5 px-5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-2 transition-all cursor-pointer active:scale-95"
-                    >
-                      <FolderPlus className="w-4 h-4 text-amber-400" />
-                      <span>+ Buat Folder Baru</span>
-                    </button>
-                  </div>
+                  {searchQuery ? (
+                    <div className="pt-2 flex justify-center">
+                      <button
+                        onClick={() => setSearchQuery && setSearchQuery('')}
+                        className="py-2.5 px-5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
+                      >
+                        Hapus Filter Pencarian
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                      <button
+                        onClick={() => fileInputExplorerRef.current?.click()}
+                        className="py-2.5 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
+                      >
+                        <Upload className="w-4 h-4" />
+                        <span>Unggah Berkas Sekarang</span>
+                      </button>
+                      <button
+                        onClick={onCreateFolder}
+                        className="py-2.5 px-5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold rounded-xl flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+                      >
+                        <FolderPlus className="w-4 h-4 text-amber-400" />
+                        <span>+ Buat Folder Baru</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

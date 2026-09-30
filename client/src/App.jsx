@@ -441,7 +441,14 @@ export default function App() {
 
         {/* Content Area */}
         {currentTab === 'admin' ? (
-          <AdminDashboard token={token} onClose={() => handleTabChange('drive')} />
+          <AdminDashboard 
+            token={token} 
+            onClose={() => handleTabChange('drive')} 
+            onNavigateToFolder={(folderPath) => {
+              setCurrentPath(folderPath);
+              handleTabChange('drive');
+            }}
+          />
         ) : (
           <FileExplorer
             files={files}
@@ -451,6 +458,8 @@ export default function App() {
             currentTab={currentTab}
             viewMode={viewMode}
             token={token}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
             onPreviewFile={(file) => setPreviewFile(file)}
             onShareFile={(file) => setShareFile(file)}
             onDownloadFile={handleDownloadFile}

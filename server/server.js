@@ -91,7 +91,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`🚀 Khanza.NET DRIVE is running on http://0.0.0.0:${PORT}`);
   console.log(`🏢 is a member of PT.Khanza Digital Nusantara`);
@@ -100,3 +100,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`💾 WebDAV endpoint: http://localhost:${PORT}/webdav`);
   console.log(`=======================================================`);
 });
+
+// Disable timeout limits for large WebDAV and chunked uploads (prevent stall/hang)
+server.keepAliveTimeout = 600000; // 10 minutes
+server.headersTimeout = 605000;
+server.requestTimeout = 0; // 0 = unlimited streaming

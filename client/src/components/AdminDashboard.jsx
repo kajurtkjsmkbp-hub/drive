@@ -3,12 +3,13 @@ import axios from 'axios';
 import { 
   Cpu, HardDrive, Users, Activity, Settings, Shield, 
   UserPlus, Edit2, Trash2, CheckCircle2, XCircle, 
-  Server, RefreshCw, Key, ShieldCheck, Database, Clock, Usb, FolderInput, DownloadCloud
+  Server, RefreshCw, Key, ShieldCheck, Database, Clock, Usb, FolderInput, DownloadCloud,
+  Zap, FolderOpen, Folder, FileText, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { formatBytes, formatDate } from '../utils/format';
 import NotificationModal from './NotificationModal';
 
-export default function AdminDashboard({ token, onClose }) {
+export default function AdminDashboard({ token, onClose, onNavigateToFolder }) {
   const [activeTab, setActiveTab] = useState('metrics'); // 'metrics', 'users', 'pools', 'usb', 'logs', 'settings'
   const [metrics, setMetrics] = useState(null);
   const [users, setUsers] = useState([]);
@@ -118,6 +119,65 @@ export default function AdminDashboard({ token, onClose }) {
             title: 'Gagal Menghapus Akun',
             message: err.response?.data?.error || 'Terjadi kesalahan saat menghapus pengguna.'
           });
+        }
+      }
+    });
+  };
+
+  const handleAttachUsb = async (usb) => {
+    try {
+      setRefreshing(true);
+      const res = await axios.post('/api/admin/usb/attach', {
+        mountPath: usb.mount,
+        label: usb.label
+      }, authHeader);
+      
+      setDialog({
+        type: 'success',
+        title: 'Flashdisk Terhubung ke Drive!',
+        message: res.data.message || 'Flashdisk berhasil dihubungkan ke Drive Saya dan berkas telah siap diakses.'
+      });
+      loadAllData();
+    } catch (err) {
+      setDialog({
+        type: 'error',
+        title: 'Gagal Menghubungkan Flashdisk',
+        message: err.response?.data?.error || 'Gagal menghubungkan flashdisk ke Drive Saya.'
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleEjectUsb = (usb) => {
+    setDialog({
+      type: 'confirm',
+      title: 'Lepaskan Flashdisk USB?',
+      message: `Apakah Anda yakin ingin melepaskan "${usb.label || 'Flashdisk USB'}" dari Drive Saya? Berkas di dalam flashdisk tetap aman dan tidak akan terhapus. Flashdisk bisa dicabut secara fisik dari port server setelah ini.`,
+      confirmText: 'Lepaskan Aman (Eject)',
+      cancelText: 'Batal',
+      onConfirm: async () => {
+        try {
+          setRefreshing(true);
+          const res = await axios.post('/api/admin/usb/eject', {
+            mountPath: usb.mount,
+            virtualPath: usb.attachedPath
+          }, authHeader);
+          
+          setDialog({
+            type: 'success',
+            title: 'Flashdisk Berhasil Dilepas',
+            message: res.data.message || 'Flashdisk telah dilepas dari Drive Saya dan siap dicabut.'
+          });
+          loadAllData();
+        } catch (err) {
+          setDialog({
+            type: 'error',
+            title: 'Gagal Melepaskan Flashdisk',
+            message: err.response?.data?.error || 'Gagal melepaskan flashdisk.'
+          });
+        } finally {
+          setRefreshing(false);
         }
       }
     });
@@ -453,132 +513,226 @@ export default function AdminDashboard({ token, onClose }) {
         </div>
       )}
 
-      {/* TAB: USB & FLASHDRIVE (NTFS DETECTION) */}
+      {/* TAB: USB & FLASHDRIVE (PROXMOX PLUG & PLAY) */}
       {activeTab === 'usb' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
+        <div className="space-y-5">
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
             <div>
-              <h3 className="text-sm font-bold text-slate-200">Flashdisk Eksternal & Deteksi Format NTFS</h3>
-              <p className="text-xs text-slate-400">Deteksi otomatis flashdisk yang dicolokkan ke server, periksa format sistem berkas, dan pasang ke penyimpanan daring</p>
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <h3 className="text-sm font-bold text-slate-100">Flashdisk Eksternal & Harddisk USB (Plug & Play)</h3>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Deteksi otomatis diska eksternal (NTFS, FAT32, exFAT, ext4). Hubungkan dan akses langsung dari Drive Saya tanpa perintah kode.
+              </p>
             </div>
             <button
               onClick={loadAllData}
-              className="px-3 py-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+              className="px-3.5 py-2 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>Pindai Port USB</span>
+              <span>Pindai Ulang Port USB</span>
             </button>
           </div>
 
+          {/* Empty State */}
           {usbDrives.length === 0 ? (
-            <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-3">
-              <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto text-slate-500">
+            <div className="p-10 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-4 shadow-sm">
+              <div className="w-16 h-16 bg-slate-800/80 border border-slate-700/50 rounded-2xl flex items-center justify-center mx-auto text-slate-400 shadow-inner">
                 <Usb className="w-8 h-8" />
               </div>
-              <h4 className="text-sm font-bold text-slate-200">Tidak Ada Flashdisk USB yang Terdeteksi</h4>
-              <p className="text-xs text-slate-400 max-w-md mx-auto">
-                Colokkan flashdisk (NTFS, FAT32, exFAT) ke port USB server atau PC Proxmox Anda. Sistem akan mendeteksinya secara otomatis.
-              </p>
+              <div className="space-y-1">
+                <h4 className="text-base font-bold text-slate-200">Tidak Ada Flashdisk USB yang Terdeteksi</h4>
+                <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                  Colokkan Flashdisk atau Harddisk Eksternal (format NTFS, FAT32, exFAT, ext4) ke port USB Proxmox / PC server Anda. Sistem akan langsung mendeteksinya di sini.
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 text-slate-400 text-[11px] font-medium border border-slate-700/60">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span>Menunggu perangkat USB dicolokkan...</span>
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
               {usbDrives.map((usb, idx) => (
-                <div key={idx} className="p-5 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl shadow-sm space-y-4">
+                <div 
+                  key={idx} 
+                  className={`p-5 rounded-2xl border transition-all duration-200 space-y-4 shadow-sm ${
+                    usb.isAttached 
+                      ? 'bg-gradient-to-b from-slate-900 via-slate-900 to-slate-900/90 border-emerald-500/40 shadow-emerald-500/5 ring-1 ring-emerald-500/20' 
+                      : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+                  }`}
+                >
                   
-                  {/* Card Header */}
-                  <div className="flex items-center justify-between">
+                  {/* Card Header & Status */}
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                        <Usb className="w-5 h-5 text-blue-400" />
+                      <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border ${
+                        usb.isAttached
+                          ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                          : 'bg-blue-500/15 border-blue-500/30 text-blue-400'
+                      }`}>
+                        <HardDrive className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-white">{usb.label || 'Flashdisk USB'}</h4>
-                        <p className="text-[11px] text-slate-400 font-mono">Perangkat: {usb.name || usb.identifier}</p>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-white tracking-tight">{usb.label || 'Flashdisk USB'}</h4>
+                          {usb.isAttached ? (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 text-emerald-400" />
+                              🟢 Terhubung ke Drive
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
+                              <Zap className="w-3 h-3 text-cyan-400" />
+                              Siap Dihubungkan
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate max-w-xs">
+                          {usb.model} • {usb.name || usb.identifier}
+                        </p>
                       </div>
                     </div>
 
-                    {/* Filesystem Format Badge */}
-                    <div className="text-right">
-                      {usb.isNtfs || usb.format.includes('NTFS') ? (
-                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          Format: NTFS
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                          Format: {usb.format || 'FAT32/exFAT'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Drive Specs */}
-                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-850 grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-[10px] text-slate-500 block">Kapasitas / Ukuran</span>
-                      <span className="font-semibold text-slate-200">{formatBytes(usb.size)}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-500 block">Status Terpasang (Mount)</span>
-                      <span className={`font-semibold ${usb.isMounted ? 'text-emerald-400' : 'text-amber-400'}`}>
-                        {usb.isMounted ? `Terpasang (${usb.mount})` : 'Belum Dipasang'}
+                    {/* Filesystem Badge */}
+                    <div className="shrink-0">
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border flex items-center gap-1 ${
+                        usb.isNtfs || (usb.format && usb.format.includes('NTFS'))
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                      }`}>
+                        <CheckCircle2 className="w-3 h-3" />
+                        Format: {usb.format || 'NTFS/FAT'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
+                  {/* Drive Specs Grid */}
+                  <div className="p-3 bg-slate-950/70 rounded-xl border border-slate-850 grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Kapasitas Diska</span>
+                      <span className="font-semibold text-slate-200">{formatBytes(usb.size)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Ruang Tersedia</span>
+                      <span className="font-semibold text-emerald-400">{formatBytes(usb.available || usb.size)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Total Isi Berkas</span>
+                      <span className="font-semibold text-cyan-400 font-mono">{usb.fileCount || 0} Item</span>
+                    </div>
+                  </div>
+
+                  {/* Content Preview (File / Folder Peek) */}
+                  {usb.previewFiles && usb.previewFiles.length > 0 && (
+                    <div className="p-3 bg-slate-950/50 rounded-xl border border-slate-850/80 space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-medium flex items-center gap-1.5">
+                          <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Isi Direktori Flashdisk Terdeteksi:</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          Menampilkan {usb.previewFiles.length} dari {usb.fileCount} item
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                        {usb.previewFiles.map((item, fIdx) => (
+                          <div 
+                            key={fIdx}
+                            className={`px-2 py-1 rounded-md text-[11px] font-mono flex items-center gap-1.5 border ${
+                              item.is_dir 
+                                ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' 
+                                : 'bg-slate-800/80 text-slate-300 border-slate-700/60'
+                            }`}
+                          >
+                            {item.is_dir ? (
+                              <Folder className="w-3 h-3 text-amber-400 shrink-0" />
+                            ) : (
+                              <FileText className="w-3 h-3 text-blue-400 shrink-0" />
+                            )}
+                            <span className="truncate max-w-[130px]" title={item.name}>{item.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons: 1-Click Operations */}
                   <div className="flex items-center gap-2 pt-1">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const res = await axios.post('/api/admin/usb/mount', {
-                            device: usb.name,
-                            name: usb.label || 'usb_drive',
-                            mountPath: usb.mount
-                          }, authHeader);
-                          setDialog({
-                            type: 'success',
-                            title: 'Status Flashdisk USB',
-                            message: res.data.message || 'Flashdisk berhasil dipasang dan siap diakses.'
-                          });
-                          loadAllData();
-                        } catch (err) {
-                          setDialog({
-                            type: 'error',
-                            title: 'Gagal Memasang Diska',
-                            message: err.response?.data?.error || 'Gagal memasang flashdisk USB.'
-                          });
-                        }
-                      }}
-                      className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/10 cursor-pointer"
-                    >
-                      <HardDrive className="w-3.5 h-3.5" />
-                      <span>{usb.isMounted ? 'Periksa / Pasang Ulang' : 'Pasang Flashdisk (Mount)'}</span>
-                    </button>
+                    {usb.isAttached ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onNavigateToFolder) {
+                              onNavigateToFolder(usb.attachedPath);
+                            }
+                          }}
+                          className="flex-1 py-2.5 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 cursor-pointer"
+                        >
+                          <FolderOpen className="w-4 h-4" />
+                          <span>Buka Folder di Drive Saya</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAttachUsb(usb)}
+                          title="Pindai ulang dan perbarui daftar berkas baru di flashdisk"
+                          className="py-2.5 px-3 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all border border-slate-700 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Sinkron Ulang</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEjectUsb(usb)}
+                          className="py-2.5 px-3 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <span>⏏️ Lepaskan (Eject)</span>
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAttachUsb(usb)}
+                        className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 cursor-pointer"
+                      >
+                        <Zap className="w-4 h-4 text-emerald-200" />
+                        <span>⚡ 1-Klik Hubungkan ke Drive Saya</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* Proxmox LXC NTFS Configuration Guide Box */}
-          <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-2">
-            <h4 className="text-xs font-bold text-white flex items-center gap-2">
-              <Server className="w-4 h-4 text-emerald-400" />
-              <span>Petunjuk Proxmox LXC untuk Flashdisk & Format NTFS</span>
-            </h4>
-            <div className="text-[11px] text-slate-400 space-y-1.5 leading-relaxed">
-              <p>
-                1. <strong>Driver NTFS</strong>: Di dalam Proxmox LXC Debian/Ubuntu, instal paket driver NTFS dengan perintah:
-                <code className="text-cyan-300 font-mono bg-slate-950 px-2 py-0.5 rounded ml-1">apt-get install -y ntfs-3g</code>
-              </p>
-              <p>
-                2. <strong>Passthrough USB ke LXC</strong>: Di Proxmox Host, Anda bisa langsung me-mount flashdisk ke wadah LXC menggunakan bind mount:
-                <code className="text-cyan-300 font-mono bg-slate-950 px-2 py-0.5 rounded ml-1">pct set &lt;VM_ID&gt; -mp0 /mnt/usb,mp=/media/usb</code>
-              </p>
-              <p>
-                3. Flashdisk yang terpasang akan langsung terdeteksi format <strong>NTFS</strong>, dapat dibaca, ditulis, dan diakses dari antarmuka drive Anda!
-              </p>
+          {/* Proxmox Host 1-Time Setup Card (No daily codes needed!) */}
+          <div className="p-5 bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 rounded-2xl space-y-3">
+            <div className="flex items-center gap-2.5 text-xs font-bold text-white">
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <Server className="w-3.5 h-3.5" />
+              </div>
+              <span>Integrasi Otomatis Proxmox VE (Bebas Perintah / Kode Selamanya)</span>
+            </div>
+            
+            <p className="text-[12px] text-slate-300 leading-relaxed">
+              Agar sistem dapat mendeteksi Flashdisk / Harddisk Eksternal yang dicolokkan ke server Proxmox secara otomatis dan Anda <strong>cukup klik-klik saja</strong> di tampilan web ini, jalankan skrip automount host sekali saja pada terminal Proxmox VE Host:
+            </p>
+
+            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between font-mono text-[11px] text-cyan-300 select-all overflow-x-auto">
+              <code>bash setup-proxmox-usb-automount.sh</code>
+            </div>
+
+            <div className="text-[11px] text-slate-400 space-y-1 border-t border-slate-850 pt-2.5">
+              <p>✅ <strong>Otomatisasi Udev & NTFS-3G</strong>: Skrip ini mengaktifkan driver NTFS dan mendeteksi otomatis saat Anda mencolokkan flashdisk merk apapun (Sandisk, Kingston, Toshiba, WD, Seagate).</p>
+              <p>✅ <strong>Bebas Kode Selamanya</strong>: Setelah skrip di atas berjalan sekali di Proxmox, Anda tidak perlu lagi menyentuh terminal. Cukup colok diska fisik, buka menu ini, dan klik <em>"Hubungkan ke Drive Saya"</em>!</p>
             </div>
           </div>
         </div>

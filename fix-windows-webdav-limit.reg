@@ -1,0 +1,10 @@
+Windows Registry Editor Version 5.00
+
+; ==============================================================================
+; Khanza.NET DRIVE Online - Fix Windows WebDAV 50MB File Size & Timeout Limit
+; Menaikkan batas ukuran file WebDAV dari 50MB bawaan Windows ke 4GB (Maksimal)
+; ==============================================================================
+
+[HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\WebClient\Parameters]
+"FileSizeLimitInBytes"=dword:ffffffff
+"SendReceiveTimeoutInSec"=dword:00000e10

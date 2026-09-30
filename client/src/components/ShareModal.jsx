@@ -93,6 +93,11 @@ export default function ShareModal({ file, token, onClose }) {
                 </label>
                 <input
                   type="password"
+                  name="share_link_password_input"
+                  id="share_link_password_input"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Kosongkan jika tautan ingin dibuka bebas tanpa kata sandi"

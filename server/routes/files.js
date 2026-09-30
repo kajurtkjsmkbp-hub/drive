@@ -9,6 +9,19 @@ const { authenticateToken, logActivity } = require('../middleware/auth');
 
 const router = express.Router();
 
+function createZipArchiver(options = { zlib: { level: 6 } }) {
+  if (typeof archiver === 'function') {
+    return archiver('zip', options);
+  }
+  if (archiver.ZipArchive) {
+    return new archiver.ZipArchive(options);
+  }
+  if (archiver.Archiver) {
+    return new archiver.Archiver('zip', options);
+  }
+  throw new Error('Unsupported archiver format');
+}
+
 const STORAGE_ROOT = path.join(__dirname, '..', '..', 'data', 'storage');
 const USERS_ROOT = path.join(STORAGE_ROOT, 'users');
 const CHUNKS_ROOT = path.join(STORAGE_ROOT, 'chunks');
@@ -475,7 +488,7 @@ router.post('/download-batch', authenticateToken, (req, res) => {
     return res.status(404).json({ error: 'Files not found.' });
   }
 
-  const archive = archiver('zip', { zlib: { level: 6 } });
+  const archive = createZipArchiver({ zlib: { level: 6 } });
   const zipName = files.length === 1 ? `${files[0].name}.zip` : `AetherDrive_Archive_${Date.now()}.zip`;
 
   res.attachment(zipName);

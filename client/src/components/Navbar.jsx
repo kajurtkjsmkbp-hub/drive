@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Search, HardDrive, Monitor, LayoutGrid, List, 
   ShieldCheck, User, LogOut, ExternalLink, Cloud, 
-  Settings, CheckCircle2, ChevronDown, Filter, Key
+  Settings, CheckCircle2, ChevronDown, Filter, Key, X
 } from 'lucide-react';
 import { formatBytes } from '../utils/format';
 
@@ -65,12 +65,30 @@ export default function Navbar({
         <div className="relative flex items-center">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
           <input
-            type="text"
+            type="search"
+            name="drive_search_query"
+            id="drive_search_query"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck="false"
+            data-lpignore="true"
+            data-1p-ignore="true"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari berkas, folder, atau media di Drive..."
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-28 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-36 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-28 p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              title="Hapus kata pencarian"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           {/* Menu Dropdown Filter */}
           <div className="absolute right-1">
