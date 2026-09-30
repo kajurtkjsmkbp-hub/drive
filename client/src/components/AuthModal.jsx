@@ -48,27 +48,15 @@ export default function AuthModal({ onLoginSuccess }) {
 
         {/* Badan Formulir */}
         <div className="p-6">
-          <div className="flex border-b border-slate-800 mb-6">
-            <button
-              onClick={() => { setIsRegister(false); setError(''); }}
-              className={`flex-1 pb-3 text-xs font-bold text-center transition-colors cursor-pointer ${
-                !isRegister
-                  ? 'border-b-2 border-blue-500 text-blue-400'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Masuk Akun
-            </button>
-            <button
-              onClick={() => { setIsRegister(true); setError(''); }}
-              className={`flex-1 pb-3 text-xs font-bold text-center transition-colors cursor-pointer ${
-                isRegister
-                  ? 'border-b-2 border-blue-500 text-blue-400'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Daftar Akun Baru
-            </button>
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              {isRegister ? 'Buat Akun Baru' : 'Masuk ke Akun Anda'}
+            </h2>
+            <p className="text-xs text-slate-400 mt-1">
+              {isRegister 
+                ? 'Lengkapi data di bawah ini untuk mendaftarkan akun penyimpanan' 
+                : 'Gunakan nama pengguna dan kata sandi Anda untuk mengakses berkas'}
+            </p>
           </div>
 
           {error && (
@@ -141,6 +129,33 @@ export default function AuthModal({ onLoginSuccess }) {
               )}
             </button>
           </form>
+
+          {/* Navigasi Beralih Mode Masuk / Daftar */}
+          <div className="mt-5 text-center text-xs text-slate-400">
+            {!isRegister ? (
+              <p>
+                Belum punya akun?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setIsRegister(true); setError(''); }}
+                  className="font-bold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer hover:underline"
+                >
+                  Silakan daftar di sini
+                </button>
+              </p>
+            ) : (
+              <p>
+                Sudah memiliki akun?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setIsRegister(false); setError(''); }}
+                  className="font-bold text-blue-400 hover:text-blue-300 transition-colors cursor-pointer hover:underline"
+                >
+                  Masuk ke akun Anda
+                </button>
+              </p>
+            )}
+          </div>
 
           {/* Footer Card */}
           <div className="mt-6 pt-4 border-t border-slate-800 text-center">
