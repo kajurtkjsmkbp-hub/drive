@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  aetherdrive:
+    build: .
+    container_name: aetherdrive-cloud
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - NODE_ENV=production
+      - JWT_SECRET=change-this-to-a-secure-random-secret
+    volumes:
+      # Persistent storage & SQLite database directory
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional Cloudflare Tunnel container (if running cloudflared inside docker)
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared-tunnel
+  #   restart: always
+  #   command: tunnel --no-autoupdate run --token YOUR_CLOUDFLARE_TUNNEL_TOKEN
