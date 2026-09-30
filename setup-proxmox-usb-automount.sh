@@ -9,8 +9,6 @@
 # ke container Khanza.NET DRIVE secara instan tanpa perlu ketik kode lagi!
 # ==============================================================================
 
-set -e
-
 # Pastikan dijalankan sebagai root di Proxmox Host
 if [ "$EUID" -ne 0 ]; then
   echo "❌ Skrip ini harus dijalankan sebagai root di Host Proxmox VE."
@@ -21,10 +19,9 @@ echo "=========================================================="
 echo "🚀 Memulai Konfigurasi Otomasi USB Flashdisk Proxmox VE..."
 echo "=========================================================="
 
-# 1. Instal driver sistem berkas lengkap di Host Proxmox
-echo "📦 Memeriksa & memasang driver NTFS, exFAT, dan utilitas..."
-apt-get update -qq
-apt-get install -y ntfs-3g exfat-fuse udev
+# 1. Instal driver sistem berkas (opsional jika repositori enterprise tidak aktif)
+echo "📦 Memeriksa ketersediaan driver filesystem..."
+apt-get install -y --no-install-recommends ntfs-3g exfat-fuse udev 2>/dev/null || true
 
 # 2. Siapkan direktori mount bersama
 MOUNT_DIR="/media/usb"
