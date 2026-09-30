@@ -232,4 +232,82 @@ router.put('/settings', (req, res) => {
   res.json({ message: 'Settings saved successfully' });
 });
 
+// GET /api/admin/usb - Detect connected USB flash drives and filesystem (NTFS, FAT32, exFAT, ext4)
+router.get('/usb', async (req, res) => {
+  try {
+    const [devices, fsSizes] = await Promise.all([
+      si.blockDevices(),
+      si.fsSize()
+    ]);
+
+    // Find removable/USB devices or mounted external drives
+    const usbDrives = devices
+      .filter(d => d.removable || d.type === 'disk' && (d.name?.startsWith('sd') && d.name !== 'sda' || d.physical === 'Removable' || d.protocol === 'USB'))
+      .map(d => {
+        const fsMatch = fsSizes.find(f => f.mount === d.mount || (d.name && f.fs && f.fs.includes(d.name)));
+        const format = (d.fsType || fsMatch?.type || 'unknown').toUpperCase();
+        const isNtfs = format.includes('NTFS');
+
+        return {
+          name: d.name,
+          identifier: d.identifier,
+          label: d.label || 'Removable Flashdisk',
+          format: format,
+          isNtfs: isNtfs,
+          size: d.size ? Number(d.size) : (fsMatch ? fsMatch.size : 0),
+          mount: d.mount || fsMatch?.mount || null,
+          isMounted: !!(d.mount || fsMatch?.mount),
+          removable: true,
+          model: d.model || 'USB Flash Drive'
+        };
+      });
+
+    res.json({
+      count: usbDrives.length,
+      drives: usbDrives
+    });
+  } catch (err) {
+    console.error('[USB Detect Error]', err);
+    res.status(500).json({ error: 'Failed to detect USB devices.' });
+  }
+});
+
+// POST /api/admin/usb/mount - Mount USB device (supports NTFS via ntfs-3g)
+router.post('/usb/mount', (req, res) => {
+  const { device, name, mountPath } = req.body;
+  const isLinux = process.platform === 'linux';
+
+  if (!isLinux) {
+    // On Windows, flashdrives auto-mount to drive letters
+    return res.json({
+      message: 'Flash drive is already mounted and accessible on Windows host',
+      mountPath: mountPath || name
+    });
+  }
+
+  // On Linux/Proxmox LXC:
+  const targetDir = mountPath || `/media/usb_${name || 'disk'}`;
+  try {
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const { execSync } = require('child_process');
+    // Attempt mount using ntfs-3g fallback or auto
+    execSync(`mount -o rw ${device} ${targetDir} || mount -t ntfs-3g ${device} ${targetDir}`);
+
+    logActivity(req.user.id, req.user.username, 'MOUNT_USB', `Mounted USB ${device} to ${targetDir}`, req);
+
+    res.json({
+      message: `USB mounted successfully to ${targetDir}`,
+      mountPath: targetDir
+    });
+  } catch (err) {
+    console.error('[Mount USB Error]', err);
+    res.status(500).json({
+      error: `Failed to mount USB device: ${err.message}. Ensure ntfs-3g is installed if using NTFS.`
+    });
+  }
+});
+
 module.exports = router;

@@ -3,15 +3,16 @@ import axios from 'axios';
 import { 
   Cpu, HardDrive, Users, Activity, Settings, Shield, 
   UserPlus, Edit2, Trash2, CheckCircle2, XCircle, 
-  Server, RefreshCw, Key, ShieldCheck, Database, Clock
+  Server, RefreshCw, Key, ShieldCheck, Database, Clock, Usb, FolderInput
 } from 'lucide-react';
 import { formatBytes, formatDate } from '../utils/format';
 
 export default function AdminDashboard({ token, onClose }) {
-  const [activeTab, setActiveTab] = useState('metrics'); // 'metrics', 'users', 'pools', 'logs', 'settings'
+  const [activeTab, setActiveTab] = useState('metrics'); // 'metrics', 'users', 'pools', 'usb', 'logs', 'settings'
   const [metrics, setMetrics] = useState(null);
   const [users, setUsers] = useState([]);
   const [pools, setPools] = useState([]);
+  const [usbDrives, setUsbDrives] = useState([]);
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
@@ -34,12 +35,13 @@ export default function AdminDashboard({ token, onClose }) {
   const loadAllData = async () => {
     try {
       setRefreshing(true);
-      const [metricsRes, usersRes, poolsRes, logsRes, settingsRes] = await Promise.all([
+      const [metricsRes, usersRes, poolsRes, logsRes, settingsRes, usbRes] = await Promise.all([
         axios.get('/api/admin/metrics', authHeader),
         axios.get('/api/admin/users', authHeader),
         axios.get('/api/admin/pools', authHeader),
         axios.get('/api/admin/logs?limit=50', authHeader),
-        axios.get('/api/admin/settings', authHeader)
+        axios.get('/api/admin/settings', authHeader),
+        axios.get('/api/admin/usb', authHeader).catch(() => ({ data: { drives: [] } }))
       ]);
 
       setMetrics(metricsRes.data);
@@ -47,6 +49,7 @@ export default function AdminDashboard({ token, onClose }) {
       setPools(poolsRes.data.pools);
       setLogs(logsRes.data.logs);
       setSettings(settingsRes.data.settings);
+      setUsbDrives(usbRes.data.drives || []);
     } catch (err) {
       console.error('Failed to load admin data:', err);
     } finally {
@@ -224,6 +227,7 @@ export default function AdminDashboard({ token, onClose }) {
         {[
           { id: 'users', label: 'Users & Permissions', icon: Users, count: users.length },
           { id: 'pools', label: 'Disks & Storage Pools', icon: HardDrive, count: pools.length },
+          { id: 'usb', label: 'USB & Flashdisk (NTFS)', icon: Usb, count: usbDrives.length },
           { id: 'logs', label: 'Security & Audit Logs', icon: Activity, count: logs.length },
           { id: 'settings', label: 'System Configuration', icon: Settings },
         ].map((tab) => {
@@ -407,6 +411,129 @@ export default function AdminDashboard({ token, onClose }) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: USB & FLASHDRIVE (NTFS DETECTION) */}
+      {activeTab === 'usb' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-slate-200">External USB Flashdrives & NTFS Detection</h3>
+              <p className="text-xs text-slate-400">Detect hot-plugged USB drives, check filesystem format, and mount to cloud storage</p>
+            </div>
+            <button
+              onClick={loadAllData}
+              className="px-3 py-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>Scan USB Ports</span>
+            </button>
+          </div>
+
+          {usbDrives.length === 0 ? (
+            <div className="p-8 bg-slate-900 border border-slate-800 rounded-3xl text-center space-y-3">
+              <div className="w-16 h-16 bg-slate-800 rounded-2xl flex items-center justify-center mx-auto text-slate-500">
+                <Usb className="w-8 h-8" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-200">No USB Flashdrives Detected</h4>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                Colokkan flashdisk (NTFS, FAT32, exFAT) ke port USB server atau PC Proxmox Anda. Sistem akan mendeteksinya secara otomatis.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {usbDrives.map((usb, idx) => (
+                <div key={idx} className="p-5 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl shadow-sm space-y-4">
+                  
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                        <Usb className="w-5 h-5 text-blue-400" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-white">{usb.label || 'USB Flashdrive'}</h4>
+                        <p className="text-[11px] text-slate-400 font-mono">Device: {usb.name || usb.identifier}</p>
+                      </div>
+                    </div>
+
+                    {/* Filesystem Format Badge */}
+                    <div className="text-right">
+                      {usb.isNtfs || usb.format.includes('NTFS') ? (
+                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Format: NTFS
+                        </span>
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          Format: {usb.format || 'FAT32/exFAT'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Drive Specs */}
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-850 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Kapasitas / Size</span>
+                      <span className="font-semibold text-slate-200">{formatBytes(usb.size)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Status Mount</span>
+                      <span className={`font-semibold ${usb.isMounted ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {usb.isMounted ? `Mounted (${usb.mount})` : 'Unmounted'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await axios.post('/api/admin/usb/mount', {
+                            device: usb.name,
+                            name: usb.label || 'usb_drive',
+                            mountPath: usb.mount
+                          }, authHeader);
+                          alert(res.data.message);
+                          loadAllData();
+                        } catch (err) {
+                          alert(err.response?.data?.error || 'Gagal mount USB');
+                        }
+                      }}
+                      className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/10"
+                    >
+                      <HardDrive className="w-3.5 h-3.5" />
+                      <span>{usb.isMounted ? 'Remount / Check' : 'Mount Flashdisk'}</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Proxmox LXC NTFS Configuration Guide Box */}
+          <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-2xl space-y-2">
+            <h4 className="text-xs font-bold text-white flex items-center gap-2">
+              <Server className="w-4 h-4 text-emerald-400" />
+              <span>Petunjuk Proxmox LXC untuk Flashdisk & Format NTFS</span>
+            </h4>
+            <div className="text-[11px] text-slate-400 space-y-1.5 leading-relaxed">
+              <p>
+                1. <strong>Driver NTFS</strong>: Di dalam Proxmox LXC Debian/Ubuntu, instal paket driver NTFS dengan perintah:
+                <code className="text-cyan-300 font-mono bg-slate-950 px-2 py-0.5 rounded ml-1">apt-get install -y ntfs-3g</code>
+              </p>
+              <p>
+                2. <strong>Passthrough USB ke LXC</strong>: Di Proxmox Host, Anda bisa langsung me-mount flashdisk ke container LXC menggunakan bind mount:
+                <code className="text-cyan-300 font-mono bg-slate-950 px-2 py-0.5 rounded ml-1">pct set &lt;VM_ID&gt; -mp0 /mnt/usb,mp=/media/usb</code>
+              </p>
+              <p>
+                3. Flashdisk yang terpasang akan langsung terdeteksi format <strong>NTFS</strong>, dapat dibaca, ditulis, dan diakses dari antarmuka drive Anda!
+              </p>
+            </div>
           </div>
         </div>
       )}
