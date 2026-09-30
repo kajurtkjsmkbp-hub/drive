@@ -13,7 +13,7 @@ echo "=========================================================="
 # 1. Update OS and install dependencies
 echo "📦 Updating packages..."
 apt-get update -y
-apt-get install -y curl git build-essential ufw
+apt-get install -y curl git build-essential ufw ntfs-3g
 
 # 2. Install Node.js 24 LTS
 echo "📦 Installing Node.js 24..."
