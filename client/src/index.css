@@ -14,6 +14,17 @@
     min-height: 100vh;
     overflow-x: hidden;
   }
+
+  /* Hilangkan bayangan / outline bawaan browser saat tombol diklik agar mulus */
+  button, input, select, a {
+    outline: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:focus, button:focus-visible, button:active {
+    outline: none !important;
+    box-shadow: none !important;
+  }
 }
 
 /* Custom scrollbars */
