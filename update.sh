@@ -38,8 +38,8 @@ npm --prefix client run build
 
 # 5. Restart Layanan (Systemd / PM2)
 echo "🔄 Merestart layanan Khanza.NET DRIVE..."
-if systemctl is-active --quiet khanza-drive; then
-    sudo systemctl restart khanza-drive
+if systemctl is-active --quiet khanza-drive 2>/dev/null; then
+    systemctl restart khanza-drive
     echo "✅ Layanan systemd 'khanza-drive' berhasil di-restart!"
 elif command -v pm2 &> /dev/null && pm2 list | grep -q "khanza-drive"; then
     pm2 restart khanza-drive
