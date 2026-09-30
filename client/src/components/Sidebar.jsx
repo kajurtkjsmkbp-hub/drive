@@ -36,7 +36,7 @@ export default function Sidebar({
   ];
 
   return (
-    <aside className="w-64 border-r border-slate-800 bg-slate-900/60 backdrop-blur-sm flex flex-col justify-between shrink-0 select-none p-3 h-[calc(100vh-4rem)]">
+    <aside className="w-64 border-r border-slate-800 bg-slate-900/70 backdrop-blur-sm flex flex-col justify-between shrink-0 select-none p-3 h-[calc(100vh-4rem)]">
       
       {/* Bagian Atas: Tombol Aksi & Navigasi */}
       <div className="space-y-4">
@@ -45,21 +45,21 @@ export default function Sidebar({
         <div className="relative">
           <button
             onClick={() => setNewMenuOpen(!newMenuOpen)}
-            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-sm rounded-2xl flex items-center justify-center gap-2 transition-colors select-none focus:outline-none focus:ring-0 active:outline-none"
+            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-600/20 active:scale-[0.98]"
           >
-            <Plus className="w-5 h-5 stroke-[2.5]" />
-            <span>Tambah Baru</span>
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>Tambah Berkas / Folder</span>
           </button>
 
           {/* Menu Dropdown Tambah */}
           {newMenuOpen && (
-            <div className="absolute left-0 top-14 w-full bg-slate-900 border border-slate-800 rounded-2xl shadow-xl py-2 z-40 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute left-0 top-14 w-full bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl py-2 z-40 animate-in fade-in zoom-in-95 duration-100">
               <button
                 onClick={() => {
                   setNewMenuOpen(false);
                   onCreateFolder();
                 }}
-                className="w-full px-4 py-2.5 text-xs text-left text-slate-200 hover:bg-slate-800 flex items-center gap-3 transition-colors select-none focus:outline-none"
+                className="w-full px-4 py-2.5 text-xs text-left text-slate-200 hover:bg-slate-800 flex items-center gap-3 transition-colors cursor-pointer"
               >
                 <FolderPlus className="w-4 h-4 text-amber-400" />
                 <span>Folder Baru</span>
@@ -69,7 +69,7 @@ export default function Sidebar({
                 onClick={() => {
                   fileInputRef.current?.click();
                 }}
-                className="w-full px-4 py-2.5 text-xs text-left text-slate-200 hover:bg-slate-800 flex items-center gap-3 transition-colors select-none focus:outline-none"
+                className="w-full px-4 py-2.5 text-xs text-left text-slate-200 hover:bg-slate-800 flex items-center gap-3 transition-colors cursor-pointer"
               >
                 <Upload className="w-4 h-4 text-blue-400" />
                 <span>Unggah Berkas</span>
@@ -95,13 +95,13 @@ export default function Sidebar({
               <button
                 key={item.id}
                 onClick={() => setCurrentTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-colors select-none focus:outline-none focus:ring-0 active:outline-none ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none ${
                   isActive
-                    ? 'bg-blue-600/15 text-blue-400 border border-blue-500/25'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-blue-400' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span className="flex-1 text-left">{item.label}</span>
               </button>
             );
@@ -116,13 +116,13 @@ export default function Sidebar({
             </p>
             <button
               onClick={() => setCurrentTab('admin')}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-colors select-none focus:outline-none focus:ring-0 active:outline-none ${
+              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer select-none ${
                 currentTab === 'admin'
-                  ? 'bg-indigo-600/20 text-indigo-300 border border-indigo-500/30'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800/80 border border-transparent'
               }`}
             >
-              <Cpu className="w-4 h-4 text-indigo-400" />
+              <Cpu className={`w-4 h-4 ${currentTab === 'admin' ? 'text-white' : 'text-indigo-400'}`} />
               <span className="flex-1 text-left">Telemetri TrueNAS</span>
             </button>
           </div>
@@ -134,7 +134,7 @@ export default function Sidebar({
         {/* Tombol Pintas Klien Desktop / WebDAV */}
         <div 
           onClick={onOpenWebDav}
-          className="p-3 bg-slate-950/70 border border-slate-800/80 hover:border-blue-500/40 rounded-xl cursor-pointer transition-colors group select-none"
+          className="p-3 bg-slate-950/80 border border-slate-800 hover:border-blue-500/40 rounded-xl cursor-pointer transition-colors group select-none"
         >
           <div className="flex items-center gap-2 mb-1">
             <Monitor className="w-3.5 h-3.5 text-blue-400 group-hover:scale-105 transition-transform" />

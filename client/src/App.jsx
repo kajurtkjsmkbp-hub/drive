@@ -39,6 +39,7 @@ export default function App() {
 
   // Data state
   const [files, setFiles] = useState([]);
+  const [shares, setShares] = useState([]);
   const [storage, setStorage] = useState({ used: 0, quota: 0, percent: 0 });
   const [loadingFiles, setLoadingFiles] = useState(false);
 
@@ -63,17 +64,23 @@ export default function App() {
     if (!token) return;
     setLoadingFiles(true);
     try {
-      let endpoint = `/api/files?parent=${encodeURIComponent(currentPath)}`;
-      if (currentTab === 'trash') endpoint += '&filter=trash';
-      else if (currentTab === 'starred') endpoint += '&filter=starred';
-      else if (currentTab === 'recent') endpoint += '&filter=recent';
+      if (currentTab === 'shared') {
+        const res = await axios.get('/api/shares', authHeaders);
+        setShares(res.data.shares || []);
+        setFiles([]);
+      } else {
+        let endpoint = `/api/files?parent=${encodeURIComponent(currentPath)}`;
+        if (currentTab === 'trash') endpoint += '&filter=trash';
+        else if (currentTab === 'starred') endpoint += '&filter=starred';
+        else if (currentTab === 'recent') endpoint += '&filter=recent';
 
-      if (searchQuery) endpoint += `&search=${encodeURIComponent(searchQuery)}`;
-      if (activeFilter) endpoint += `&type=${activeFilter}`;
+        if (searchQuery) endpoint += `&search=${encodeURIComponent(searchQuery)}`;
+        if (activeFilter) endpoint += `&type=${activeFilter}`;
 
-      const res = await axios.get(endpoint, authHeaders);
-      setFiles(res.data.files || []);
-      setStorage(res.data.storage || { used: 0, quota: 0, percent: 0 });
+        const res = await axios.get(endpoint, authHeaders);
+        setFiles(res.data.files || []);
+        setStorage(res.data.storage || { used: 0, quota: 0, percent: 0 });
+      }
     } catch (err) {
       if (err.response?.status === 401 || err.response?.status === 403) {
         handleLogout();
@@ -88,6 +95,22 @@ export default function App() {
       fetchFiles();
     }
   }, [token, currentPath, currentTab, searchQuery, activeFilter]);
+
+  const handleTabChange = (tabId) => {
+    setCurrentPath('/');
+    setCurrentTab(tabId);
+  };
+
+  const handleRevokeShare = async (shareId) => {
+    if (confirm('Cabut tautan berbagi ini? Pengunjung tidak akan dapat lagi mengakses berkas.')) {
+      try {
+        await axios.delete(`/api/shares/${shareId}`, authHeaders);
+        fetchFiles();
+      } catch (err) {
+        alert('Gagal mencabut tautan');
+      }
+    }
+  };
 
   // Handle Logout
   const handleLogout = () => {
@@ -293,7 +316,7 @@ export default function App() {
         {/* Left Sidebar */}
         <Sidebar
           currentTab={currentTab}
-          setCurrentTab={setCurrentTab}
+          setCurrentTab={handleTabChange}
           storage={storage}
           user={user}
           onCreateFolder={() => {
@@ -302,15 +325,16 @@ export default function App() {
           }}
           onUploadFiles={handleUploadFiles}
           onOpenWebDav={() => setWebDavModalOpen(true)}
-          onOpenAdmin={() => setCurrentTab('admin')}
+          onOpenAdmin={() => handleTabChange('admin')}
         />
 
         {/* Content Area */}
         {currentTab === 'admin' ? (
-          <AdminDashboard token={token} onClose={() => setCurrentTab('drive')} />
+          <AdminDashboard token={token} onClose={() => handleTabChange('drive')} />
         ) : (
           <FileExplorer
             files={files}
+            shares={shares}
             currentPath={currentPath}
             setCurrentPath={setCurrentPath}
             currentTab={currentTab}
@@ -319,6 +343,7 @@ export default function App() {
             onShareFile={(file) => setShareFile(file)}
             onDownloadFile={handleDownloadFile}
             onDownloadBatch={handleDownloadBatch}
+            onRevokeShare={handleRevokeShare}
             onRenameFile={(file) => {
               setRenameTarget(file);
               setRenameNewName(file.name);
