@@ -23,6 +23,7 @@ fi
 
 # 2. Ambil Source Code Terbaru dari GitHub
 echo "🔄 Mengunduh pembaruan terbaru dari GitHub (origin/main)..."
+git checkout -- update.sh 2>/dev/null || true
 git pull origin main
 
 # 3. Instal Dependensi Backend & Frontend
