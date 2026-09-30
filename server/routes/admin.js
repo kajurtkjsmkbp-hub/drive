@@ -292,15 +292,17 @@ router.put('/settings', (req, res) => {
 });
 
 // GET /api/admin/usb - Detect connected USB flash drives and external hard disks
+// AUTO-ATTACH: Detected drives are AUTOMATICALLY linked to Drive Saya (no click needed!)
 router.get('/usb', async (req, res) => {
   try {
     const isWindows = process.platform === 'win32';
     const isLinux = process.platform === 'linux';
+    const userId = req.user.id;
 
     let usbDrives = [];
 
     if (isLinux) {
-      // 1. Read /proc/mounts to find true external mounts (/media and /mnt)
+      // Read /proc/mounts to identify real mounted devices
       let mountMap = {};
       if (fs.existsSync('/proc/mounts')) {
         try {
@@ -317,7 +319,7 @@ router.get('/usb', async (req, res) => {
         } catch {}
       }
 
-      // Check candidate directories (/media and /mnt)
+      // Scan /media and /mnt for USB directories
       const scanDirs = ['/media', '/mnt'];
       const scannedMounts = new Set();
 
@@ -327,24 +329,12 @@ router.get('/usb', async (req, res) => {
             const list = fs.readdirSync(baseDir, { withFileTypes: true });
             list.forEach(entry => {
               if (entry.isDirectory()) {
-                const fullMount = path.join(baseDir, entry.name);
-                scannedMounts.add(fullMount);
+                scannedMounts.add(path.join(baseDir, entry.name));
               }
             });
           } catch {}
         }
       });
-
-      // Also ensure /media/usb is checked even if not in readdir
-      if (fs.existsSync('/media/usb')) {
-        scannedMounts.add('/media/usb');
-      }
-
-      // Root stat to avoid showing empty rootfs directories
-      let rootStat = null;
-      try {
-        rootStat = fs.statfsSync('/');
-      } catch {}
 
       for (const mntPath of scannedMounts) {
         if (!fs.existsSync(mntPath)) continue;
@@ -352,9 +342,7 @@ router.get('/usb', async (req, res) => {
         let entries = [];
         try {
           entries = fs.readdirSync(mntPath, { withFileTypes: true });
-        } catch {
-          continue;
-        }
+        } catch { continue; }
 
         const validEntries = entries.filter(e => 
           !e.name.startsWith('.') && 
@@ -363,19 +351,8 @@ router.get('/usb', async (req, res) => {
           e.name !== 'lost+found'
         );
 
-        let mntStat = null;
-        try {
-          mntStat = fs.statfsSync(mntPath);
-        } catch {}
-
-        const isMountedInProc = !!mountMap[mntPath];
-        const isDistinctFromRoot = mntStat && rootStat && (mntStat.blocks !== rootStat.blocks || mntStat.bsize !== rootStat.bsize);
-
-        // STRICT RULE: Only show drives that actually contain files!
-        // Empty folders (0 items) or unmounted dummies are NEVER shown to avoid clutter.
-        if (validEntries.length === 0) {
-          continue;
-        }
+        // STRICT: Only show drives that have actual files inside
+        if (validEntries.length === 0) continue;
 
         const devInfo = mountMap[mntPath] || {};
         let rawFsType = (devInfo.fstype || '').toLowerCase();
@@ -385,7 +362,7 @@ router.get('/usb', async (req, res) => {
         else if (rawFsType.includes('exfat')) format = 'exFAT';
         else if (rawFsType.includes('ext')) format = 'EXT4';
 
-        // Check for USB volume label
+        // Try to get volume label from filesystem
         let volumeLabel = '';
         if (devInfo.dev) {
           try {
@@ -395,38 +372,31 @@ router.get('/usb', async (req, res) => {
         }
 
         const baseName = path.basename(mntPath);
-        let friendlyLabel = 'Flashdisk USB Eksternal';
-        if (volumeLabel) {
-          friendlyLabel = `${volumeLabel} (Flashdisk USB)`;
-        } else if (baseName && baseName !== 'usb') {
-          friendlyLabel = `Flashdisk ${baseName}`;
-        }
+        let friendlyLabel = volumeLabel || baseName;
+        if (!friendlyLabel || friendlyLabel === 'usb') friendlyLabel = 'Flashdisk USB Eksternal';
+
+        let mntStat = null;
+        try { mntStat = fs.statfsSync(mntPath); } catch {}
 
         const totalBytes = mntStat ? Number(mntStat.blocks) * Number(mntStat.bsize) : 0;
         const freeBytes = mntStat ? Number(mntStat.bfree) * Number(mntStat.bsize) : 0;
         const usedBytes = Math.max(0, totalBytes - freeBytes);
-
-        // Filter out zero-byte dummy mounts
-        if (totalBytes === 0 && validEntries.length === 0) {
-          continue;
-        }
 
         usbDrives.push({
           name: baseName,
           identifier: devInfo.dev || mntPath,
           mount: mntPath,
           label: friendlyLabel,
-          format: format,
+          format,
           isNtfs: format === 'NTFS',
           size: totalBytes,
           used: usedBytes,
           available: freeBytes,
-          model: `Port USB Server Proxmox (${mntPath})`,
+          model: `Port USB Proxmox (${devInfo.dev || mntPath})`,
           entries: validEntries
         });
       }
     } else if (isWindows) {
-      // Windows external drives (E:, F:, G:, etc.)
       const [devices, fsSizes] = await Promise.all([
         si.blockDevices(),
         si.fsSize()
@@ -444,13 +414,9 @@ router.get('/usb', async (req, res) => {
             const cleanLabel = rawLabel.replace(/[^\w\s-]/g, '').trim() || 'Flashdisk Eksternal';
             
             let entries = [];
-            try {
-              entries = fs.readdirSync(mountPath, { withFileTypes: true });
-            } catch {}
+            try { entries = fs.readdirSync(mountPath, { withFileTypes: true }); } catch {}
             const validEntries = entries.filter(e => 
-              !e.name.startsWith('.') && 
-              e.name !== 'System Volume Information' && 
-              e.name !== '$RECYCLE.BIN'
+              !e.name.startsWith('.') && e.name !== 'System Volume Information' && e.name !== '$RECYCLE.BIN'
             );
 
             const totalBytes = d.size ? Number(d.size) : (fsMatch ? fsMatch.size : 0);
@@ -474,16 +440,31 @@ router.get('/usb', async (req, res) => {
       });
     }
 
+    // AUTO-ATTACH: Automatically index detected USB drives into Drive Saya
     const processed = usbDrives.map(d => {
       const folderName = `[USB] ${d.label}`;
       const virtualPath = `/${folderName}`;
 
-      const attachedRecord = db.prepare(`
+      // Auto-create virtual folder in files table if not exists
+      let attachedRecord = db.prepare(`
         SELECT id, name, path FROM files 
         WHERE user_id = ? AND is_dir = 1 AND path = ? AND is_trashed = 0
-      `).get(req.user.id, virtualPath);
+      `).get(userId, virtualPath);
 
-      const previewFiles = (d.entries || []).slice(0, 8).map(e => ({
+      if (!attachedRecord) {
+        // Auto-attach: create folder + index files automatically
+        try {
+          db.prepare(`
+            INSERT INTO files (user_id, name, parent_path, path, disk_path, size, mime_type, is_dir)
+            VALUES (?, ?, '/', ?, ?, 0, 'directory', 1)
+          `).run(userId, folderName, virtualPath, d.mount);
+          
+          scanExternalDirToDb(userId, d.mount, virtualPath);
+          attachedRecord = { id: 0 };
+        } catch {}
+      }
+
+      const previewFiles = (d.entries || []).slice(0, 10).map(e => ({
         name: e.name,
         is_dir: e.isDirectory(),
         mime_type: e.isDirectory() ? 'directory' : (mime.lookup(e.name) || 'application/octet-stream')
@@ -500,7 +481,7 @@ router.get('/usb', async (req, res) => {
         available: d.available,
         mount: d.mount,
         isMounted: true,
-        isAttached: !!attachedRecord,
+        isAttached: true,
         attachedFolder: folderName,
         attachedPath: virtualPath,
         removable: true,
@@ -508,6 +489,20 @@ router.get('/usb', async (req, res) => {
         fileCount: (d.entries || []).length,
         previewFiles: previewFiles
       };
+    });
+
+    // AUTO-CLEANUP: Remove stale USB entries that are no longer plugged in
+    const activeUsbPaths = processed.map(p => p.attachedPath);
+    const staleUsb = db.prepare(`
+      SELECT id, path, disk_path FROM files 
+      WHERE user_id = ? AND is_dir = 1 AND name LIKE '[USB]%' AND parent_path = '/' AND is_trashed = 0
+    `).all(userId);
+    
+    staleUsb.forEach(s => {
+      if (!activeUsbPaths.includes(s.path)) {
+        // This USB folder is no longer detected — auto-cleanup
+        db.prepare(`DELETE FROM files WHERE user_id = ? AND (path = ? OR parent_path = ? OR parent_path LIKE ?)`).run(userId, s.path, s.path, `${s.path}/%`);
+      }
     });
 
     res.json({
