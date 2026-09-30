@@ -371,13 +371,10 @@ router.get('/usb', async (req, res) => {
         const isMountedInProc = !!mountMap[mntPath];
         const isDistinctFromRoot = mntStat && rootStat && (mntStat.blocks !== rootStat.blocks || mntStat.bsize !== rootStat.bsize);
 
-        // A directory is an actual external drive IF:
-        // 1) It has files inside, OR
-        // 2) It is explicitly mounted in /proc/mounts, OR
-        // 3) Its statfs is distinct from root filesystem
-        // If it's an empty folder with 0 files and same blocks as root, it means NO USB is currently plugged in!
-        if (validEntries.length === 0 && !isMountedInProc && !isDistinctFromRoot) {
-          continue; // Skip empty unmounted dummy folder
+        // STRICT RULE: Only show drives that actually contain files!
+        // Empty folders (0 items) or unmounted dummies are NEVER shown to avoid clutter.
+        if (validEntries.length === 0) {
+          continue;
         }
 
         const devInfo = mountMap[mntPath] || {};
